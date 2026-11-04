@@ -261,8 +261,9 @@
         if (s === 'playing') this.flashCenter('play'); else if (s === 'paused') this.flashCenter('pause');
       });
       p.on('item', it => { this.updateButtons(); this.renderTime(); this.renderMarks(); document.title = it.displayTitle + ' — VLC Web'; });
-      p.on('loaded', it => {
+      p.on('loaded', (it, info) => {
         this.updateStageView();
+        if (info && info.routeSwitch) return;
         if (this.settings.get('titleOnStart') && this.settings.get('showMediaChangePopup')) this.osd(it.displayTitle, this.settings.get('titleTimeout') * 1000, 'title');
       });
       p.on('meta', it => {

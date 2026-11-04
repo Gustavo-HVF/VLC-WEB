@@ -180,6 +180,15 @@ h1, h2, h3 { font-family: var(--heading-font); }
 .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--danger); animation: blink 1s infinite; }
 @keyframes blink { 50% { opacity: .2; } }
 .resume-bar { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 10; display: flex; align-items: center; gap: 10px; background: rgba(28, 29, 33, .94); color: #eee; border: 1px solid #444; border-radius: 10px; padding: 6px 6px 6px 14px; box-shadow: var(--shadow); font-size: 13px; max-width: 94%; }
+.audio-unlock { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 11; display: flex; align-items: center; gap: 10px; padding: 14px 22px; border-radius: 999px; border: 2px solid #fff; background: rgba(0, 0, 0, .78); color: #fff; font: 600 16px var(--font); cursor: pointer; box-shadow: 0 8px 30px rgba(0, 0, 0, .5); animation: unlockPulse 1.6s ease-in-out infinite; }
+.audio-unlock .ico { width: 26px; height: 26px; }
+.audio-unlock:hover { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+@keyframes unlockPulse { 50% { box-shadow: 0 0 0 10px rgba(255, 255, 255, .15), 0 8px 30px rgba(0, 0, 0, .5); } }
+.diag-meter { height: 10px; border-radius: 5px; background: var(--track); overflow: hidden; }
+.diag-meter b { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #2e9d4a, #e0b400 70%, #e5484d); transition: width .1s; }
+.diag-ok { color: var(--ok); font-weight: 600; }
+.diag-bad { color: var(--danger); font-weight: 600; }
+.diag-warn { color: #d99a00; font-weight: 600; }
 .stage-placeholder { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: #000; color: #999; }
 .pip-body { margin: 0; background: #000; height: 100vh; overflow: hidden; }
 .pip-body .stage { width: 100vw; height: 100vh; }

@@ -35,6 +35,7 @@
 
     /* Áudio */
     audioEnabled: true,
+    audioMode: 'auto',             // auto (motor de efeitos, com saída direta como alternativa) | direct
     volume: 1,
     maxVolume: 1.25,               // 125% como no VLC (pode ir até 200%)
     rememberVolume: true,
@@ -102,6 +103,8 @@
       const stored = U.store.get('settings', {});
       // migração: a preferência antiga "theme" vira o tema visual equivalente
       if (stored && !stored.skin && stored.theme) stored.skin = stored.theme === 'light' ? 'light' : stored.theme === 'system' ? 'auto' : 'default';
+      // migração: o item "Áudio → Faixa de áudio → Desativar" desligava o áudio de forma permanente; religa uma vez
+      if (stored && !stored._audioFix1) { stored.audioEnabled = true; stored._audioFix1 = true; }
       this.data = Object.assign({}, DEFAULTS, stored);
     }
     get(key) { return this.data[key]; }

@@ -27,7 +27,7 @@ Abrir o `index.html` direto do disco (`file://`) funciona para o básico, mas o 
 - **Dispositivo de captura**: câmera e microfone (com escolha de dispositivo, resolução e taxa de quadros) e **captura da área de trabalho** (tela, janela ou aba).
 - **Mídia recente**, retomada de onde parou (perguntar, sempre ou nunca) e teclas de mídia do sistema.
 - **Decodificador FFmpeg (WebAssembly)**: arquivos que o navegador não reproduz (AVI, WMV, FLV, MPEG‑2/VOB, MKV com HEVC/AC‑3/DTS, WMA, APE…) são remultiplexados sem perdas ou convertidos localmente e reproduzidos.
-- **Converter / salvar** com perfis no estilo do VLC: H.264+MP3/AAC (MP4), VP8+Vorbis e VP9+Opus (WebM), Theora (OGG), MPEG‑2 (TS), MPEG‑4 (AVI), GIF, MP3, AAC, Vorbis, Opus, FLAC, WAV de CD e remultiplexação sem perdas. Permite editar resolução, taxa de quadros, qualidade, taxas de bits, canais e trecho (início/fim). Há também o modo **tempo real**, que grava a reprodução com os efeitos aplicados.
+- **Converter / salvar** com perfis no estilo do VLC: H.264+MP3/AAC (MP4), VP8+Vorbis e VP9+Vorbis (WebM), Theora (OGG), MPEG‑2 (TS), MPEG‑4 (AVI), GIF, MP3, AAC, Vorbis, FLAC, WAV de CD e remultiplexação sem perdas. Permite editar resolução, taxa de quadros, qualidade, taxas de bits, canais e trecho (início/fim). Há também o modo **tempo real**, que grava a reprodução com os efeitos aplicados.
 - **Transmitir**: envia o vídeo processado e o áudio por WebRTC para outra aba ou janela (`receiver.html`) e para Chromecast/AirPlay (Remote Playback API).
 - **Salvar lista de reprodução** em M3U, M3U8, XSPF, PLS ou HTML. Também abre M3U, PLS, XSPF, ASX, WPL e CUE.
 
@@ -44,6 +44,9 @@ Abrir o `index.html` direto do disco (`file://`) funciona para o básico, mas o 
 - **Modo estéreo**: estéreo, invertido, esquerdo, direito, mono, Dolby Surround e fones de ouvido.
 - **Faixas de áudio**: HLS, DASH e arquivos MKV/MP4 com várias faixas (a troca é feita pelo FFmpeg). Aceita também um **arquivo de áudio externo sincronizado**.
 - **Dispositivo de saída** (nos navegadores compatíveis), atraso de áudio e **visualizações**: espectro, espectrômetro, osciloscópio, medidor VU, Goom e espectro 3D.
+- **Diagnóstico de som** (*Áudio → Diagnóstico de som*, `Alt+A`): mostra por que o som não sai (motor bloqueado pelo navegador, mudo, volume 0%, faixa desativada ou codec não suportado), com medidor de sinal, tons de teste e correções com um clique.
+- Áudio em formatos que o navegador não decodifica (AC‑3, E‑AC‑3, DTS, TrueHD, MP2…) é detectado ao abrir o arquivo e convertido pelo FFmpeg.
+- Quando o navegador bloqueia o motor de áudio, aparece o botão **"Clique para ativar o som"**. Se o bloqueio continuar, a reprodução passa automaticamente para a **saída direta**, sem efeitos. Essa saída também pode ser escolhida em *Preferências → Áudio*.
 - Exibição da **capa do álbum** e dos metadados (ID3v1/v2, FLAC, Vorbis/Opus, MP4/M4A, Matroska, WAV).
 
 ### Vídeo (filtros em WebGL)

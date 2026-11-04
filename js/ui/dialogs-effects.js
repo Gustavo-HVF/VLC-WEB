@@ -28,6 +28,8 @@
       }),
       el('span', { class: 'grow' }),
       F.button('Fechar', () => w.close(), 'primary'));
+    if (p.directAudio) w.body.prepend(el('div', { class: 'f-hint warn' }, '⚠ A saída de áudio direta está ativa: os efeitos de áudio não se aplicam. ',
+      F.button('Ativar o motor de efeitos', () => { p.setDirectAudio(false); w.close(); effects(app, 'audio'); }, 'small')));
     if (R.cssMode) w.body.prepend(F.hint('⚠ A mídia atual está em modo de compatibilidade (outra origem sem CORS): apenas alguns efeitos de vídeo estão disponíveis e os efeitos de áudio não se aplicam.', 'warn'));
     w.show();
   }

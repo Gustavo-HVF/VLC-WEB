@@ -89,13 +89,18 @@
       for (const el of [this.videoMain, this.videoRaw, this.imageMedia]) {
         for (const ev of MEDIA_EVENTS) el.addEventListener(ev, e => this.onMediaEvent(ev, e, el));
       }
-      this.videoMain.textTracks.addEventListener('addtrack', e => this.onTextTrack(e.track));
+      for (const v of [this.videoMain, this.videoRaw]) v.textTracks.addEventListener('addtrack', e => { if (v === this.media) this.onTextTrack(e.track); });
+      this.audioTrackOff = false;
+      // saída direta: o áudio sai pelo próprio elemento de mídia, sem o motor de efeitos (máxima compatibilidade)
+      this.directAudio = this.settings.get('audioMode') === 'direct';
+      this.settings.on('change:audioMode', v => this.switchAudioRoute(v === 'direct'));
+      this.audio.on('ctxstate', () => this.checkAudioHealth());
       this.renderer.marqueeVars = () => this.marqueeVars();
       this.renderer.on('layout', r => this.subs.setRect(r));
       this.renderer.on('tainted', () => { this.restricted = true; this.emit('osd', 'Modo de compatibilidade: filtros de vídeo limitados (sem CORS)'); });
       this.settings.on('change:preservePitch', v => this.applyPitchPreference(v));
       this.settings.on('change:visualization', () => this.updateAudioView());
-      this.settings.on('change:audioEnabled', v => this.audio.setSourceGain(this.videoMain, v ? (this.slave ? 0 : 1) : 0));
+      this.settings.on('change:audioEnabled', () => this.applySourceGain());
       this.settings.on('change:videoEnabled', v => this.setVideoEnabled(v));
       this.settings.on('change:deinterlace', () => this.applyDeinterlace());
       this.settings.on('change:deinterlaceMode', () => this.applyDeinterlace());
@@ -144,6 +149,9 @@
       const token = ++this.loadToken;
       this.item = item;
       this.restricted = false;
+      this.audioTrackOff = false;
+      this._audioBlocked = false;
+      this.emit('audio-blocked', false);
       this.renderer.setTainted(false);
       this.setState('opening');
       this.emit('item', item);
@@ -165,10 +173,11 @@
           this.imageMedia.load(url, this.settings.get('imageDuration'));
           return;
         }
-        const el = this.videoMain;
+        const direct = this.directAudio && !item.stream;
+        const el = direct ? this.videoRaw : this.videoMain;
         this.media = el;
-        this.audio.attach(el);
-        this.audio.setSourceGain(el, this.settings.get('audioEnabled') ? 1 : 0);
+        if (!direct) this.audio.attach(el);
+        this.applySourceGain();
         if (item.stream) {
           el.srcObject = item.stream;
           this.audio.setSourceGain(el, 0);
@@ -205,7 +214,7 @@
     }
 
     async loadHls(url, token) {
-      const el = this.videoMain;
+      const el = this.media;
       try { await U.loadScript('vendor/hls/hls.min.js'); } catch (e) { /* sem hls.js */ }
       if (token !== this.loadToken) return;
       if (window.Hls && window.Hls.isSupported()) {
@@ -238,7 +247,7 @@
       d.on(window.dashjs.MediaPlayer.events.ERROR, e => { this.log.error('dash', JSON.stringify(e.error || e).slice(0, 200)); });
       d.on(window.dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => this.emit('tracks'));
       d.on(window.dashjs.MediaPlayer.events.QUALITY_CHANGE_RENDERED, () => this.emit('tracks'));
-      d.initialize(this.videoMain, url, false);
+      d.initialize(this.media, url, false);
     }
 
     unload() {
@@ -279,9 +288,11 @@
           break;
         case 'play': case 'playing':
           this.setState('playing');
+          clearTimeout(this._healthT);
+          this._healthT = setTimeout(() => this.checkAudioHealth(), 700);
           if (this.slave) { this.slave.currentTime = this.media.currentTime; this.slave.play().catch(() => {}); }
           break;
-        case 'pause': if (this.state !== 'stopped' && this.state !== 'ended' && !this.media.ended) this.setState('paused'); if (this.slave) this.slave.pause(); this.saveResume(); break;
+        case 'pause': this.checkAudioHealth(); if (this.state !== 'stopped' && this.state !== 'ended' && !this.media.ended) this.setState('paused'); if (this.slave) this.slave.pause(); this.saveResume(); break;
         case 'waiting': case 'stalled': if (!this.media.paused) this.setState('buffering'); break;
         case 'canplay': if (this.state === 'buffering' && !this.media.paused) this.setState('playing'); break;
         case 'ended': this.onEnded(); break;
@@ -306,7 +317,7 @@
       this.applyPitchPreference(this.settings.get('preservePitch'));
       this.setVolume(this.audio.volume, true);
       this.loadItemSubtitles(item);
-      for (const tt of Array.from(this.videoMain.textTracks)) this.onTextTrack(tt);
+      if (m.textTracks) for (const tt of Array.from(m.textTracks)) this.onTextTrack(tt);
       this.updateAudioView();
       let start = this.pendingStart || 0;
       const saved = this.resumeData[item.key];
@@ -317,31 +328,123 @@
       }
       if (start > 0 && isFinite(m.duration)) m.currentTime = Math.min(start, m.duration - 0.5);
       this.pendingStart = 0;
+      const routeSwitch = !!this.switchingRoute;
+      this.switchingRoute = false;
       this.emit('duration', this.duration);
-      this.emit('loaded', item);
+      this.emit('loaded', item, { routeSwitch });
       this.emit('tracks');
       this.applyChapters(item);
       this.updateMediaSession();
       if (item.extraAudio) this.startSlave(item.extraAudio);
       this.log.info('input', `Mídia carregada: ${isVid ? m.videoWidth + 'x' + m.videoHeight : 'somente áudio'}${isFinite(m.duration) ? ', ' + U.fmtTime(m.duration) : ''}`);
       if (this.autoplay) this.playMedia(); else this.setState('paused');
-      if (this.settings.get('fullscreenOnStart') && isVid) this.emit('request-fullscreen');
+      if (this.settings.get('fullscreenOnStart') && isVid && !routeSwitch) this.emit('request-fullscreen');
+      if (!this.isImage && !routeSwitch) {
+        if (!this.settings.get('audioEnabled')) this.emit('osd', 'Áudio desativado em Preferências → Áudio');
+        else if (this.audio.muted) this.emit('osd', 'Som mudo — pressione M para ativar');
+        else if (this.audio.volume < 0.01) this.emit('osd', 'Volume em 0%');
+      }
       // Vídeo esperado mas não decodificado → oferecer o FFmpeg
       const vidExt = U.EXT.video.includes(U.ext(item.name));
       if (!isVid && vidExt && item.file && !item.playable && !this.isImage) {
         this.suggestFFmpeg(item, 'O navegador não conseguiu decodificar a imagem deste vídeo (codec não suportado, ex.: HEVC, MPEG‑2, VC‑1).');
-      } else if (item.file && !item.playable && isVid) {
-        setTimeout(() => {
-          if (this.item !== item || this.media.paused || this.suggested) return;
-          const tracks = item.info && item.info.tracks || [];
-          const hasAudio = tracks.some(t => t.type === 'audio');
-          if (hasAudio && this.media.webkitAudioDecodedByteCount === 0) this.suggestFFmpeg(item, 'O áudio deste arquivo não está sendo decodificado pelo navegador (ex.: AC‑3, DTS, E‑AC‑3).', true);
-        }, 2500);
+      } else if (item.file && !item.playable && !this.isImage) {
+        this.checkAudioCodec(item);
+        setTimeout(() => this.checkAudioDecoding(item), 2500);
       }
     }
 
+    /** Áudio em formato que o navegador não decodifica (AC‑3, DTS…): oferece converter só o áudio com o FFmpeg. */
+    checkAudioCodec(item) {
+      if (item !== this.item || item.playable || this.suggested || !item.file) return;
+      const name = unsupportedAudioCodec(item);
+      if (name) this.suggestFFmpeg(item, `O áudio deste arquivo está em ${name}, formato que o navegador não consegue reproduzir — por isso o som não sai.`, true, true);
+    }
+
+    /** Verificação por comportamento (para codecs não identificados pelos metadados). */
+    checkAudioDecoding(item) {
+      if (this.item !== item || this.media.paused || this.suggested || item.playable) return;
+      const m = this.media;
+      const hasAudio = ((item.info && item.info.tracks) || []).some(t => t.type === 'audio');
+      if (!hasAudio) return;
+      const silent = m.webkitAudioDecodedByteCount === 0 || m.mozHasAudio === false || (m.audioTracks && m.audioTracks.length === 0);
+      if (silent) this.suggestFFmpeg(item, 'O áudio deste arquivo não está sendo decodificado pelo navegador (formatos como AC‑3, E‑AC‑3 e DTS não são suportados) — por isso o som não sai.', true, true);
+    }
+
+    /** Ganho da fonte principal: zero se a faixa estiver desativada, o áudio desligado ou houver áudio externo. */
+    applySourceGain() {
+      const on = this.settings.get('audioEnabled') && !this.audioTrackOff;
+      this.audio.setSourceGain(this.videoMain, on && !this.slave ? 1 : 0);
+      const m = this.media;
+      if (!m || m === this.imageMedia) return;
+      if (this.audio.isAttached(m)) m.muted = false;
+      else m.muted = !on || !!this.slave || this.audio.muted;
+    }
+
+    setAudioTrackOff(off) {
+      this.audioTrackOff = off;
+      this.applySourceGain();
+      this.emit('tracks');
+      this.emit('osd', off ? 'Faixa de áudio desativada' : 'Faixa de áudio ativada');
+    }
+
+    /** O som está bloqueado se a mídia toca pelo motor de efeitos e o navegador não liberou o contexto de áudio. */
+    checkAudioHealth() {
+      const m = this.media;
+      const blocked = !!(this.item && m && !m.paused && !this.isImage && this.audio.isAttached(m) && this.audio.ctx && !this.audio.running);
+      if (blocked !== !!this._audioBlocked) {
+        this._audioBlocked = blocked;
+        this.emit('audio-blocked', blocked);
+        if (blocked) this.log.warn('audio', 'O navegador bloqueou o motor de áudio (' + this.audio.ctx.state + '): aguardando um clique para liberar o som');
+      }
+    }
+
+    /** Escolha do usuário entre motor de efeitos e saída direta (também atualiza a preferência). */
+    setDirectAudio(direct) {
+      this.settings.set('audioMode', direct ? 'direct' : 'auto');
+      this.switchAudioRoute(direct);
+      if (!direct) this.audio.ensure();
+    }
+
+    /** Libera o som (chamado por um clique). Se o navegador recusar, passa para a saída direta. */
+    async unlockAudio() {
+      if (await this.audio.resume()) { this.checkAudioHealth(); this.emit('osd', 'Som ativado'); return true; }
+      this.log.warn('audio', 'Não foi possível liberar o motor de áudio; usando a saída direta');
+      this.switchAudioRoute(true);
+      return false;
+    }
+
+    /**
+     * Alterna a reprodução atual entre o motor de efeitos (Web Audio) e a saída direta do elemento.
+     * (Um elemento ligado ao Web Audio não pode ser desligado; por isso a troca usa o segundo elemento.)
+     */
+    switchAudioRoute(direct) {
+      this.directAudio = direct;
+      const it = this.item, old = this.media;
+      const target = direct ? this.videoRaw : this.videoMain;
+      if (!it || it.stream || this.isImage || this.hls || this.dash || this.restricted || old === target) { this.applySourceGain(); this.checkAudioHealth(); return; }
+      const src = old.currentSrc || old.getAttribute('src');
+      if (!src) return;
+      const t = old.currentTime, playing = !old.paused;
+      old.pause();
+      if (!direct) this.audio.attach(target);
+      if (old.crossOrigin) target.crossOrigin = old.crossOrigin; else target.removeAttribute('crossorigin');
+      this.media = target;
+      this.pendingStart = t;
+      this.autoplay = playing;
+      this.switchingRoute = true;
+      target.src = src;
+      target.load();
+      old.removeAttribute('src'); old.load();
+      this.applySourceGain();
+      this._audioBlocked = false;
+      this.emit('audio-blocked', false);
+      this.emit('osd', direct ? 'Saída de áudio direta (sem efeitos de áudio)' : 'Motor de efeitos de áudio ativado');
+      this.emit('tracks');
+    }
+
     playMedia() {
-      this.audio.ensure();
+      if (this.audio.isAttached(this.media) || !this.directAudio) this.audio.ensure();
       const p = this.media.play();
       if (p && p.catch) p.catch(err => {
         if (err.name === 'NotAllowedError') { this.setState('paused'); this.emit('osd', 'Clique em reproduzir para iniciar'); }
@@ -357,11 +460,12 @@
       const recoverable = (item.file && !item.playable) || (item.url && !this.fallbackTried);
       this.log[recoverable ? 'warn' : 'error']('input', `Erro de mídia (${codes[err.code] || err.code}): ${err.message || ''}`);
       // URL de outra origem sem CORS → tenta modo de compatibilidade (sem Web Audio/WebGL)
-      if (item.url && !this.hls && !this.dash && m === this.videoMain && this.videoMain.crossOrigin && !this.fallbackTried) {
+      if (item.url && !this.hls && !this.dash && m !== this.imageMedia && m.crossOrigin && !this.fallbackTried) {
         this.fallbackTried = true;
         this.restricted = true;
         const raw = this.videoRaw;
-        this.videoMain.removeAttribute('src'); this.videoMain.load();
+        if (m !== raw) { m.removeAttribute('src'); m.load(); }
+        raw.removeAttribute('crossorigin');
         this.media = raw;
         raw.src = item.url;
         raw.load();
@@ -387,12 +491,12 @@
       }
     }
 
-    suggestFFmpeg(item, reason, soft) {
+    suggestFFmpeg(item, reason, soft, autoOk) {
       if (this.suggested) return;
       this.suggested = true;
       const mode = this.settings.get('ffmpegMode');
-      if (mode === 'never') { if (!soft) this.fail(reason + ' Ative o decodificador FFmpeg em Preferências → Entrada/Codecs.'); return; }
-      if (mode === 'always' && !soft) { this.playWithFFmpeg(item); return; }
+      if (mode === 'never') { if (!soft) this.fail(reason + ' Ative o decodificador FFmpeg em Preferências → Entrada/Codecs.'); else this.emit('osd', 'Sem som: formato de áudio não suportado pelo navegador'); return; }
+      if (mode === 'always' && (!soft || autoOk)) { this.playWithFFmpeg(item); return; }
       if (!soft) this.setState('error');
       this.emit('ffmpeg-ask', item, reason, soft);
     }
@@ -571,7 +675,7 @@
     toggleMute() {
       const m = !this.audio.muted;
       this.audio.setMuted(m);
-      if (this.restricted || !this.audio.ctx) this.media.muted = m;
+      this.applySourceGain();
       this.emit('osd', m ? 'Mudo' : `Volume ${Math.round(this.audio.volume * 100)}%`);
     }
 
@@ -645,6 +749,7 @@
     }
 
     selectAudioTrack(id) {
+      if (this.audioTrackOff) this.setAudioTrackOff(false);
       const [kind, n] = String(id).split(':');
       const i = +n;
       if (kind === 'hls' && this.hls) this.hls.audioTrack = i;
@@ -711,7 +816,8 @@
       a.preload = 'auto';
       a.src = src instanceof Blob ? (this._slaveURL = URL.createObjectURL(src)) : src;
       this.slave = a;
-      if (this.audio.attach(a)) this.audio.setSourceGain(this.videoMain, 0);
+      this.audio.attach(a);
+      this.applySourceGain();
       a.playbackRate = this.rate;
       a.currentTime = this.currentTime;
       if (!this.media.paused) a.play().catch(() => {});
@@ -724,7 +830,7 @@
       this.slave.removeAttribute('src');
       this.slave = null;
       if (this._slaveURL) { URL.revokeObjectURL(this._slaveURL); this._slaveURL = null; }
-      this.audio.setSourceGain(this.videoMain, this.settings.get('audioEnabled') ? 1 : 0);
+      this.applySourceGain();
       this.emit('tracks');
     }
 
@@ -733,7 +839,7 @@
       if (!item || item !== this.item) return;
       let ch = (item.info && item.info.chapters) || [];
       if (!ch.length && this.item && !this.isImage) {
-        const tt = Array.from(this.videoMain.textTracks || []).find(t => t.kind === 'chapters' && t.cues && t.cues.length);
+        const tt = Array.from(this.media.textTracks || []).find(t => t.kind === 'chapters' && t.cues && t.cues.length);
         if (tt) ch = Array.from(tt.cues).map(c => ({ start: c.startTime, end: c.endTime, title: c.text }));
       }
       const d = this.duration;
@@ -825,7 +931,10 @@
         const rec = this.recent.find(r => r.key === item.key);
         if (rec && item.meta.title && rec.title !== item.displayTitle) { rec.title = item.displayTitle; U.store.set('recent', this.recent); this.emit('recent'); }
         this.emit('meta', item);
-        if (item === this.item) { this.applyChapters(item); this.updateMediaSession(); this.emit('tracks'); }
+        if (item === this.item) {
+          this.applyChapters(item); this.updateMediaSession(); this.emit('tracks');
+          if (this.state === 'playing' || this.state === 'paused') this.checkAudioCodec(item);
+        }
       } finally { item._metaPending = false; }
     }
 
@@ -911,7 +1020,7 @@
       if (this.hasVideo) {
         try { tracks.push(...this.renderer.captureStream(fps).getVideoTracks()); } catch (e) { this.log.warn('record', e.message); }
       }
-      if (!this.restricted) {
+      if (!this.restricted && this.audio.isAttached(this.media)) {
         const a = this.audio.getRecordStream();
         if (a) tracks.push(...a.getAudioTracks());
       } else if (this.media.captureStream) {
@@ -919,6 +1028,27 @@
       }
       return new MediaStream(tracks);
     }
+  }
+
+  /** Retorna o nome do codec de áudio padrão do arquivo se o navegador não puder decodificá-lo. */
+  function unsupportedAudioCodec(item) {
+    const tracks = ((item.info && item.info.tracks) || []).filter(t => t.type === 'audio');
+    if (!tracks.length) return null;
+    const t = tracks.find(x => x.default) || tracks[0];
+    const id = String(t.codecId || t.fourcc || '');
+    const can = mime => !!(mime && document.createElement('audio').canPlayType(mime));
+    const rules = [
+      [/^A_AC3|^ac-3$/i, 'Dolby Digital (AC‑3)', 'audio/mp4; codecs="ac-3"'],
+      [/^A_EAC3|^ec-3$/i, 'Dolby Digital Plus (E‑AC‑3)', 'audio/mp4; codecs="ec-3"'],
+      [/^A_DTS|^dts[chlxe]$/i, 'DTS', 'audio/mp4; codecs="dtsc"'],
+      [/^A_TRUEHD|^mlpa$/i, 'Dolby TrueHD', null],
+      [/^A_MPEG\/L[12]$/i, 'MPEG Áudio camada 1/2 (MP2)', null],
+      [/^A_PCM|^(lpcm|sowt|twos|in24|in32|fl32|fl64)$/i, 'PCM sem compressão', null],
+      [/^A_REAL|^A_MS\/ACM|^A_QUICKTIME|^A_TTA|^A_WAVPACK/i, 'um codec legado', null],
+      [/^A_ALAC|^alac$/i, 'Apple Lossless (ALAC)', 'audio/mp4; codecs="alac"']
+    ];
+    for (const [re, name, mime] of rules) if (re.test(id)) return can(mime) ? null : name;
+    return null;
   }
 
   function trackLabel(t, i) {
@@ -934,6 +1064,7 @@
   function isDash(url) { return /\.mpd(\?|#|$)/i.test(url); }
 
   Player.RATES = RATES;
+  Player.unsupportedAudioCodec = unsupportedAudioCodec;
   Player.isHls = isHls;
   Player.isDash = isDash;
   VW.Player = Player;
