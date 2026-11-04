@@ -111,17 +111,75 @@
 
     get available() { return U.supports.webAudio; }
 
+    /** true quando o motor está de fato produzindo som (contexto "running"). */
+    get running() { return !!this.ctx && this.ctx.state === 'running'; }
+
     /** Cria o contexto e o grafo (somente após um gesto do usuário). */
     ensure() {
       if (!this.available) return null;
       if (!this.ctx) this.build();
-      if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => { /* aguardará próximo gesto */ });
+      if (this.ctx.state !== 'running' && this.ctx.state !== 'closed') this.ctx.resume().catch(() => { /* aguardará próximo gesto */ });
       return this.ctx;
+    }
+
+    /** Tenta retomar o contexto; resolve com true se ele passou a tocar. */
+    async resume() {
+      if (!this.ctx) return false;
+      try { await this.ctx.resume(); } catch (e) { /* bloqueado pelo navegador */ }
+      return this.running;
+    }
+
+    /**
+     * Navegadores só liberam o áudio depois de um gesto do usuário (clique, toque ou tecla).
+     * Em vez de tentar uma única vez, tenta retomar o contexto a cada gesto enquanto ele estiver parado.
+     */
+    installUnlock() {
+      if (this._unlockInstalled) return;
+      this._unlockInstalled = true;
+      const tryResume = () => { if (this.ctx && this.ctx.state !== 'running' && this.ctx.state !== 'closed') this.ctx.resume().catch(() => {}); };
+      for (const ev of ['pointerup', 'click', 'touchend', 'keydown']) document.addEventListener(ev, tryResume, { capture: true, passive: true });
+    }
+
+    /** Toca um tom de teste: pelo motor de efeitos (direct=false) ou por um elemento de áudio comum. */
+    async testTone(direct) {
+      if (direct) {
+        const rate = 44100, n = rate;
+        const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+        const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+        w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+        v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+        for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.sin(2 * Math.PI * 440 * i / rate) * 0.3 * 32767 * Math.min(1, (n - i) / 2000, i / 2000), true);
+        const a = new Audio(URL.createObjectURL(new Blob([buf], { type: 'audio/wav' })));
+        await a.play();
+        return true;
+      }
+      this.ensure();
+      if (!(await this.resume())) return false;
+      const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+      o.frequency.value = 440; g.gain.value = 0.25;
+      g.gain.setTargetAtTime(0, this.ctx.currentTime + 0.8, 0.05);
+      o.connect(g); g.connect(this.ctx.destination);
+      o.start(); o.stop(this.ctx.currentTime + 1.1);
+      return true;
+    }
+
+    /** Nível RMS atual da saída (0..1), usado no diagnóstico de som. */
+    level() {
+      if (!this.analyser || !this.running) return 0;
+      const d = this._lvl || (this._lvl = new Float32Array(this.analyser.fftSize));
+      this.analyser.getFloatTimeDomainData(d);
+      let s = 0;
+      for (let i = 0; i < d.length; i++) s += d[i] * d[i];
+      return Math.sqrt(s / d.length);
     }
 
     build() {
       const AC = window.AudioContext || window.webkitAudioContext;
+      // iPhone/iPad: sem isto, o Web Audio fica mudo com a chave de silencioso ligada
+      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* não suportado */ }
       const ctx = this.ctx = new AC({ latencyHint: 'playback' });
+      ctx.addEventListener('statechange', () => { this.log.info('audio', 'Estado do motor de áudio: ' + ctx.state); this.emit('ctxstate', ctx.state); });
+      this.installUnlock();
       const g = (v = 1) => { const n = ctx.createGain(); n.gain.value = v; return n; };
       this.input = g();
       this.delayNode = ctx.createDelay(10);

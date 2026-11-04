@@ -61,6 +61,8 @@
         return [
           F.group('Geral',
             chk('Ativar áudio', 'audioEnabled'),
+            sel('Saída de áudio:', 'audioMode', [['auto', 'Motor de efeitos (equalizador, efeitos, volume até 200%)'], ['direct', 'Direta (máxima compatibilidade, sem efeitos de áudio)']]),
+            el('div', { class: 'btn-row' }, F.button('Diagnóstico de som…', () => { w.close(); app.dialogs.audioDiag(); }, 'small')),
             rng('Volume padrão:', 'volume', 0, 2, 0.01, v => Math.round(v * 100) + '%'),
             chk('Lembrar o volume entre sessões', 'rememberVolume'),
             sel('Volume máximo do controle:', 'maxVolume', [['1', '100%'], ['1.25', '125%'], ['1.5', '150%'], ['2', '200%']], v => +v),

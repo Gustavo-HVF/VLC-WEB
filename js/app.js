@@ -35,7 +35,8 @@
         stream: () => VW.dialogsInfo.stream(this),
         help: () => VW.dialogsInfo.help(this),
         about: () => VW.dialogsInfo.about(this),
-        skins: tab => VW.dialogsSkins.gallery(this, tab)
+        skins: tab => VW.dialogsSkins.gallery(this, tab),
+        audioDiag: () => VW.dialogsAudio.diagnostics(this)
       };
       this.defineActions();
       this.menu = new VW.ui.MenuSystem(U.$('#menubar'), this.menuDefs(), id => this.actions.shortcutLabel(id));
@@ -114,6 +115,7 @@
       def('mute', 'Mudo', () => p.toggleMute(), ['M', 'VolumeMute'], 'Áudio');
       def('audio-track-cycle', 'Alternar faixa de áudio', () => p.cycleAudioTrack(), ['B'], 'Áudio');
       def('audio-device-cycle', 'Alternar dispositivo de áudio', () => this.cycleAudioDevice(), ['Shift+A'], 'Áudio');
+      def('audio-diagnostics', 'Diagnóstico de som…', () => this.dialogs.audioDiag(), ['Alt+A'], 'Áudio');
       def('audio-delay-down', 'Diminuir atraso do áudio', () => { p.audio.setDelay(p.audio.state.delay - 0.05); this.controls.osd(`Atraso do áudio: ${Math.round(p.audio.state.delay * 1000)} ms`); }, ['J'], 'Áudio');
       def('audio-delay-up', 'Aumentar atraso do áudio', () => { p.audio.setDelay(p.audio.state.delay + 0.05); this.controls.osd(`Atraso do áudio: ${Math.round(p.audio.state.delay * 1000)} ms`); }, ['K'], 'Áudio');
       def('visualization-cycle', 'Alternar visualização', () => {
@@ -207,9 +209,11 @@
       const bookmarkMenu = () => [item('Gerenciar…', 'bookmarks'), item('Criar marcador', 'bookmark-add'), { sep: true }].concat(p.bookmarks.map(b => ({ label: `${b.name} (${U.fmtTime(b.time)})`, action: () => p.seek(b.time) })));
       const audioTracks = () => {
         const t = p.getAudioTracks();
-        const list = [{ label: 'Desativar', radio: true, checked: !S.get('audioEnabled'), action: () => S.set('audioEnabled', !S.get('audioEnabled')) }];
-        if (!t.length && has()) list.push({ label: 'Faixa 1', radio: true, checked: S.get('audioEnabled'), action: () => S.set('audioEnabled', true) });
-        return list.concat(t.map(x => ({ label: x.label, radio: true, checked: x.active && S.get('audioEnabled'), action: () => { S.set('audioEnabled', true); p.selectAudioTrack(x.id); } })));
+        // "Desativar" vale só para a mídia atual (como no VLC), não é mais uma preferência permanente
+        const list = [{ label: 'Desativar', radio: true, checked: p.audioTrackOff, action: () => p.setAudioTrackOff(true) }];
+        if (!t.length && has()) list.push({ label: 'Faixa 1', radio: true, checked: !p.audioTrackOff, action: () => p.setAudioTrackOff(false) });
+        if (!S.get('audioEnabled')) list.push({ sep: true }, { label: 'Ativar o áudio (desligado nas Preferências)', action: () => S.set('audioEnabled', true) });
+        return list.concat(t.map(x => ({ label: x.label, radio: true, checked: x.active && !p.audioTrackOff, action: () => p.selectAudioTrack(x.id) })));
       };
       const audioDevices = async () => (await p.audio.listDevices());
       let devCache = [];
@@ -290,7 +294,10 @@
           item('Aumentar volume', 'vol-up', { icon: 'volume' }), item('Diminuir volume', 'vol-down', { icon: 'volume-low' }),
           { label: 'Mudo', icon: 'mute', shortcut: 'mute', checked: p.audio.muted, action: A('mute') },
           { sep: true },
-          item('Equalizador e efeitos…', 'effects', { icon: 'sliders' })
+          item('Equalizador e efeitos…', 'effects', { icon: 'sliders' }),
+          { sep: true },
+          { label: 'Saída direta (sem efeitos, máxima compatibilidade)', checked: p.directAudio, action: () => p.setDirectAudio(!p.directAudio) },
+          item('Diagnóstico de som…', 'audio-diagnostics', { icon: 'help' })
         ],
         video: () => [
           { label: 'Faixa de vídeo', submenu: videoTracks },
@@ -330,6 +337,7 @@
           { label: 'Configuração VLM', disabled: true, hint: 'Gerenciador de transmissões do VLC — indisponível no navegador' },
           { label: 'Guia de programas', disabled: true, hint: 'Requer sintonizador de TV digital' },
           item('Mensagens', 'messages', { icon: 'log' }),
+          item('Diagnóstico de som', 'audio-diagnostics', { icon: 'volume' }),
           { label: 'Plugins e extensões', action: () => this.dialogs.messages() },
           { sep: true },
           item('Personalizar interface…', 'customize'), item('Preferências', 'prefs', { icon: 'prefs' })
@@ -780,7 +788,7 @@
         else if (!document.hidden && this._pausedByHide) { this._pausedByHide = false; this.player.play(); }
       });
       window.addEventListener('beforeunload', () => this.player.saveResume());
-      app.addEventListener('pointerdown', () => this.player.audio.ensure(), { once: true });
+      app.addEventListener('pointerdown', () => { if (!this.player.directAudio) this.player.audio.ensure(); }, { once: true });
     }
 
     bindPlayer() {
@@ -791,6 +799,10 @@
       p.on('ffmpeg-progress', s => this.showFFProgress(s));
       p.on('ffmpeg-ask', (item, reason, soft) => this.askFFmpeg(item, reason, soft));
       p.on('resume-ask', pos => this.showResume(pos));
+      // o navegador bloqueou o motor de áudio: mostra o botão "Clique para ativar o som"
+      const unlock = U.$('#audio-unlock');
+      p.on('audio-blocked', b => { unlock.hidden = !b; });
+      unlock.addEventListener('click', e => { e.stopPropagation(); p.unlockAudio(); });
       p.on('item', () => this.hideResume());
       this.recorder.on('state', () => this.controls.updateButtons());
       this.recorder.on('snapshot', blob => this.controls.showSnapshot(blob));

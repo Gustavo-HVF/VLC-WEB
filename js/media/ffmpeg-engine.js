@@ -207,7 +207,8 @@
         const okInContainer = container === 'webm' ? ['opus', 'vorbis'].includes(a.codec) : ['aac', 'mp3', 'opus', 'flac'].includes(a.codec);
         if (aOK && okInContainer) aArgs.push('-c:a', 'copy');
         else if (container === 'mp4') { aArgs.push('-c:a', 'aac', '-b:a', '192k', '-ac', '2'); what.push('áudio → AAC'); }
-        else { aArgs.push('-c:a', 'libopus', '-b:a', '160k', '-ac', '2'); what.push('áudio → Opus'); }
+        // (o codificador Opus do ffmpeg.wasm 0.12 derruba a aba do navegador; por isso WebM usa Vorbis)
+        else { aArgs.push('-c:a', 'libvorbis', '-q:a', '5', '-ac', '2'); what.push('áudio → Vorbis'); }
       }
       const mime = (v ? 'video/' : 'audio/') + container;
       const label = what.length ? 'Convertendo (' + what.join(', ') + ')…' : 'Remultiplexando (sem perdas)…';
