@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="VLC Web: reprodutor multimídia completo no navegador — lista de reprodução, legendas, equalizador, filtros de vídeo, captura, gravação, conversão e transmissão.">
+  <meta name="theme-color" content="#1e1f22">
+  <title>VLC Web — reprodutor de mídia</title>
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <!-- Ícones (SVG sprite) -->
+  <svg id="icons" xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></symbol>
+    <symbol id="i-prev" viewBox="0 0 24 24"><path d="M6 6h2v12H6zM9.5 12 18 18V6z"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></symbol>
+    <symbol id="i-slower" viewBox="0 0 24 24"><path d="M11 18V6l-8.5 6zM20 18V6l-8.5 6z"/></symbol>
+    <symbol id="i-faster" viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6zM13 6v12l8.5-6z"/></symbol>
+    <symbol id="i-jump-back" viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></symbol>
+    <symbol id="i-jump-fwd" viewBox="0 0 24 24"><path d="M12 5V2l5 4-5 4V7a5 5 0 1 0 5 5h2a7 7 0 1 1-7-7z"/></symbol>
+    <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zM14 4h6v6h-2V6h-4zM4 14h2v4h4v2H4zM18 14h2v6h-6v-2h4z"/></symbol>
+    <symbol id="i-fullscreen-exit" viewBox="0 0 24 24"><path d="M8 4h2v6H4V8h4zM14 4h2v4h4v2h-6zM4 14h6v6H8v-4H4zM14 14h6v2h-4v4h-2z"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M3 6h9v2H3zM16 6h5v2h-5zM12 4h3v6h-3zM3 16h5v2H3zM12 16h9v2h-9zM8 14h3v6H8zM3 11h12v2H3zM19 11h2v2h-2zM15 9h3v6h-3z"/></symbol>
+    <symbol id="i-playlist" viewBox="0 0 24 24"><path d="M3 5h12v2H3zM3 9h12v2H3zM3 13h8v2H3zM17 13v6.2a2.5 2.5 0 1 1-2-2.45V11h5v2z"/></symbol>
+    <symbol id="i-loop" viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2zM17 17H7v-3l-4 4 4 4v-3h12v-6h-2z"/></symbol>
+    <symbol id="i-loop-one" viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2zM17 17H7v-3l-4 4 4 4v-3h12v-6h-2zM11.2 9.5H13v5.5h-1.6v-3.6h-1.2V10z"/></symbol>
+    <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M10.6 9.2 5.4 4 4 5.4l5.2 5.2zM14.5 4l2 2L4 18.6 5.4 20 17.9 7.5 20 9.6V4zM14.8 13.4l-1.4 1.4 3.1 3.1-2 2.1H20v-5.5l-2 2z"/></symbol>
+    <symbol id="i-record" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M9 4 7.2 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3.2L15 4zm3 4.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></symbol>
+    <symbol id="i-abloop" viewBox="0 0 24 24"><text x="12" y="16.5" font-size="11" font-weight="700" font-family="Arial, sans-serif" text-anchor="middle">A·B</text></symbol>
+    <symbol id="i-frame" viewBox="0 0 24 24"><path d="M3 5h2v14H3zM7 5h10v14H7zm2 2v10h6V7zM19 5h2v14h-2zM10.5 9.5l3.5 2.5-3.5 2.5z"/></symbol>
+    <symbol id="i-eject" viewBox="0 0 24 24"><path d="M5 17h14v2H5zM12 5l7 9H5z"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2zm0-8h-2V7h2z"/></symbol>
+    <symbol id="i-pip" viewBox="0 0 24 24"><path d="M3 5h18v14H3zm2 2v10h14V7zm6 4h7v5h-7z"/></symbol>
+    <symbol id="i-aspect" viewBox="0 0 24 24"><path d="M3 6h18v12H3zm2 2v8h14V8zM7 10h3v1.5H8.5V13H7zM17 14h-3v-1.5h1.5V11H17z"/></symbol>
+    <symbol id="i-subtitle" viewBox="0 0 24 24"><path d="M3 5h18v14H3zm2 2v10h14V7zM6 13h5v2H6zM12 13h6v2h-6zM6 10h8v2H6zM15 10h3v2h-3z"/></symbol>
+    <symbol id="i-minimal" viewBox="0 0 24 24"><path d="M3 5h18v14H3zm2 4v8h14V9z"/></symbol>
+    <symbol id="i-library" viewBox="0 0 24 24"><path d="M4 4h3v16H4zM9 4h3v16H9zM14.5 4.7l2.9-.8 4.1 15.4-2.9.8z"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9zM14 7.97v8.06A4.5 4.5 0 0 0 16.5 12 4.5 4.5 0 0 0 14 7.97zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06A9 9 0 0 0 14 3.23z"/></symbol>
+    <symbol id="i-volume-low" viewBox="0 0 24 24"><path d="M5 9v6h4l5 5V4L9 9zM16 7.97v8.06A4.5 4.5 0 0 0 18.5 12 4.5 4.5 0 0 0 16 7.97z"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9zM16.6 12l2.7-2.7-1.4-1.4-2.7 2.7-2.7-2.7-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4z"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 2h8l6 6v14H6zM14 3.5V8h4.5z"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 5h7l2 2h9v12H3z"/></symbol>
+    <symbol id="i-folder-plus" viewBox="0 0 24 24"><path d="M3 5h7l2 2h9v12H3zm10 5v2.5h-2.5v2H13V17h2v-2.5h2.5v-2H15V10z"/></symbol>
+    <symbol id="i-disc" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 7a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm0 2a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></symbol>
+    <symbol id="i-network" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm6.9 6h-3a15 15 0 0 0-1.4-3.6A8 8 0 0 1 18.9 8zM12 4a14 14 0 0 1 1.9 4h-3.8A14 14 0 0 1 12 4zM4.3 14a8 8 0 0 1 0-4h3.4a16 16 0 0 0 0 4zm.8 2h3a15 15 0 0 0 1.4 3.6A8 8 0 0 1 5.1 16zm3-8h-3a8 8 0 0 1 4.3-3.6A15 15 0 0 0 8.1 8zM12 20a14 14 0 0 1-1.9-4h3.8A14 14 0 0 1 12 20zm2.3-6H9.7a15 15 0 0 1 0-4h4.6a15 15 0 0 1 0 4zm.3 5.6a15 15 0 0 0 1.4-3.6h3a8 8 0 0 1-4.4 3.6zm1.7-5.6a16 16 0 0 0 0-4h3.4a8 8 0 0 1 0 4z"/></symbol>
+    <symbol id="i-capture" viewBox="0 0 24 24"><path d="M12 2a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm0 4a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM7 18h10l1 4H6z"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M4 3h12l4 4v14H4zm3 2v4h8V5zm5 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></symbol>
+    <symbol id="i-convert" viewBox="0 0 24 24"><path d="M7 7h11l-3-3 1.4-1.4L22 8l-5.6 5.4L15 12l3-3H7zM17 17H6l3 3-1.4 1.4L2 16l5.6-5.4L9 12l-3 3h11z"/></symbol>
+    <symbol id="i-stream" viewBox="0 0 24 24"><path d="M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7.8 7.8 6.4 6.4a8 8 0 0 0 0 11.2l1.4-1.4a6 6 0 0 1 0-8.4zm8.4 0a6 6 0 0 1 0 8.4l1.4 1.4a8 8 0 0 0 0-11.2zM4.9 4.9 3.5 3.5a12 12 0 0 0 0 17l1.4-1.4a10 10 0 0 1 0-14.2zm14.2 0a10 10 0 0 1 0 14.2l1.4 1.4a12 12 0 0 0 0-17z"/></symbol>
+    <symbol id="i-codec" viewBox="0 0 24 24"><path d="M7 7h10v10H7zm2 2v6h6V9zM9 2h2v3H9zM13 2h2v3h-2zM9 19h2v3H9zM13 19h2v3h-2zM2 9h3v2H2zM2 13h3v2H2zM19 9h3v2h-3zM19 13h3v2h-3z"/></symbol>
+    <symbol id="i-quit" viewBox="0 0 24 24"><path d="M11 2h2v10h-2zM16.6 5.4 18 4A9 9 0 1 1 6 4l1.4 1.4a7 7 0 1 0 9.2 0z"/></symbol>
+    <symbol id="i-music" viewBox="0 0 24 24"><path d="M12 3v10.6A4 4 0 1 0 14 17V7h4V3z"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><path d="M4 3h16v18H4zm2 2v2h2V5zm10 0v2h2V5zM6 9v2h2V9zm10 0v2h2V9zM6 13v2h2v-2zm10 0v2h2v-2zM6 17v2h2v-2zm10 0v2h2v-2zM10 5v14h4V5z"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><path d="M3 4h18v16H3zm2 2v12h14V6zm2 10 3-4 2 2.5 3-4.5 4 6z"/></symbol>
+    <symbol id="i-radio" viewBox="0 0 24 24"><path d="M3 8l13-5 .7 1.9L8.5 8H21v13H3zm5 4a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm6 1v2h5v-2z"/></symbol>
+    <symbol id="i-podcast" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3zM5 11h2a5 5 0 0 0 10 0h2a7 7 0 0 1-6 6.9V21h-2v-3.1A7 7 0 0 1 5 11z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 11h14v2H5z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M9 3h6l1 2h4v2H4V5h4zM6 8h12l-1 13H7z"/></symbol>
+    <symbol id="i-sort" viewBox="0 0 24 24"><path d="M3 6h18v2H3zM3 11h12v2H3zM3 16h6v2H3z"/></symbol>
+    <symbol id="i-locate" viewBox="0 0 24 24"><path d="M11 2h2v4h-2zM11 18h2v4h-2zM2 11h4v2H2zM18 11h4v2h-4zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></symbol>
+    <symbol id="i-prefs" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="6.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></g></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><path d="M2 6h20v12H2zm2 2v8h16V8zm1 1h2v2H5zm3 0h2v2H8zm3 0h2v2h-2zm3 0h2v2h-2zm3 0h2v2h-2zM5 12h2v2H5zm12 0h2v2h-2zM8 12h8v2H8z"/></symbol>
+    <symbol id="i-log" viewBox="0 0 24 24"><path d="M5 3h14v18H5zm2 2v14h10V5zM8 7h8v2H8zM8 11h8v2H8zM8 15h5v2H8z"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 17h-2v-2h2zm2.1-7.7-.9.9c-.7.7-1.2 1.3-1.2 2.8h-2v-.5c0-1.1.5-2.1 1.2-2.8l1.2-1.3A2 2 0 1 0 10 10H8a4 4 0 1 1 7.1 1.3z"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></symbol>
+    <symbol id="i-warning" viewBox="0 0 24 24"><path d="M12 2 1 21h22zm-1 7h2v6h-2zm0 8h2v2h-2z"/></symbol>
+    <symbol id="i-dock" viewBox="0 0 24 24"><path d="M3 4h18v16H3zm2 2v12h9V6zm11 0v12h3V6z"/></symbol>
+  </svg>
+
+  <div id="app" class="app" tabindex="-1">
+    <nav id="menubar" class="menubar" role="menubar" aria-label="Menu principal"></nav>
+
+    <main class="main">
+      <section id="stage" class="stage" aria-label="Área de vídeo">
+        <video id="video-main" class="media-el" playsinline preload="auto"></video>
+        <video id="video-raw" class="media-el" playsinline preload="auto"></video>
+        <canvas id="gl-canvas" class="gl-canvas"></canvas>
+        <canvas id="vis-canvas" class="vis-canvas"></canvas>
+
+        <div id="art-view" class="art-view" hidden>
+          <img id="art-img" alt="Capa do álbum" hidden>
+          <div id="art-placeholder" class="art-placeholder"><svg class="ico"><use href="#i-music"/></svg></div>
+          <div class="art-meta"><div id="art-title" class="art-title"></div><div id="art-sub" class="art-sub"></div></div>
+        </div>
+
+        <div id="welcome" class="welcome">
+          <img src="assets/icon.svg" alt="" class="welcome-logo" width="112" height="112">
+          <h1>VLC Web</h1>
+          <p>Arraste arquivos, pastas, legendas ou URLs para cá — ou escolha uma opção:</p>
+          <div class="welcome-actions">
+            <button type="button" class="btn big" data-action="open-file"><svg class="ico"><use href="#i-file"/></svg>Abrir arquivo</button>
+            <button type="button" class="btn big" data-action="open-folder"><svg class="ico"><use href="#i-folder"/></svg>Abrir pasta</button>
+            <button type="button" class="btn big" data-action="open-network"><svg class="ico"><use href="#i-network"/></svg>Abrir URL</button>
+            <button type="button" class="btn big" data-action="open-capture"><svg class="ico"><use href="#i-capture"/></svg>Capturar</button>
+          </div>
+          <div id="welcome-recent" class="welcome-recent" hidden></div>
+          <p class="welcome-hint">Pressione <kbd>F1</kbd> para ajuda e atalhos · <kbd>Ctrl+E</kbd> efeitos · <kbd>Ctrl+P</kbd> preferências</p>
+        </div>
+
+        <div id="subs-layer" class="subs-layer" aria-live="polite"></div>
+
+        <div id="osd-title" class="osd osd-title"></div>
+        <div id="osd-text" class="osd osd-text" role="status"></div>
+        <div id="osd-center" class="osd-center"><svg class="ico"><use href="#i-play"/></svg></div>
+        <div id="osd-snap" class="osd-snap"></div>
+        <div id="zoom-map" class="zoom-map"><div class="zoom-rect"></div></div>
+        <div id="rec-indicator" class="rec-indicator" hidden><span class="rec-dot"></span>REC <span id="rec-time">00:00</span></div>
+
+        <div id="resume-bar" class="resume-bar" hidden>
+          <span id="resume-text"></span>
+          <button type="button" id="resume-yes" class="btn small primary">Continuar</button>
+          <button type="button" id="resume-no" class="icon-btn" aria-label="Fechar"><svg class="ico"><use href="#i-close"/></svg></button>
+        </div>
+      </section>
+
+      <aside id="playlist-panel" class="playlist-panel" hidden aria-label="Lista de reprodução">
+        <div id="pl-resizer" class="pl-resizer" aria-hidden="true"></div>
+        <div id="pl-head" class="pl-head">
+          <div id="pl-tabs" class="pl-tabs" role="tablist"></div>
+          <div class="pl-tools">
+            <input id="pl-search" type="search" placeholder="Pesquisar na lista…" aria-label="Pesquisar">
+            <button type="button" id="pl-dock" class="icon-btn" title="Desencaixar"><svg class="ico"><use href="#i-dock"/></svg></button>
+            <button type="button" id="pl-close" class="icon-btn" title="Fechar lista (Ctrl+L)"><svg class="ico"><use href="#i-close"/></svg></button>
+          </div>
+        </div>
+        <div id="pl-list" class="pl-list" tabindex="0" role="grid" aria-label="Itens"></div>
+        <div id="pl-foot" class="pl-foot"></div>
+      </aside>
+    </main>
+
+    <footer id="controls" class="controls">
+      <div class="seek-row">
+        <span id="time-elapsed" class="time" title="Ir para o tempo (Ctrl+T)">--:--</span>
+        <div id="seekbar" class="seekbar" role="slider" tabindex="0" aria-label="Posição" aria-valuemin="0">
+          <div class="seek-track"><div class="seek-buffer"></div><div class="seek-fill"></div></div>
+          <div class="seek-marks"></div>
+          <div class="seek-handle"></div>
+          <div id="seek-tip" class="seek-tip" hidden></div>
+        </div>
+        <span id="time-total" class="time" title="Clique para alternar entre duração e tempo restante">--:--</span>
+      </div>
+      <div class="bars">
+        <div id="advbar" class="toolbar adv" hidden></div>
+        <div id="toolbar" class="toolbar main-bar"></div>
+      </div>
+    </footer>
+
+    <div id="statusbar" class="statusbar">
+      <span id="status-text" class="status-text">Pronto</span>
+      <button type="button" id="status-rate" class="status-rate" title="Velocidade de reprodução">1.0x</button>
+      <span id="status-time" class="status-time"></span>
+    </div>
+
+    <div id="drop-overlay" class="drop-overlay" hidden><div><svg class="ico"><use href="#i-plus"/></svg><p>Solte para reproduzir</p></div></div>
+  </div>
+
+  <div id="ff-toast" class="ff-toast" hidden>
+    <div class="ff-row"><svg class="ico"><use href="#i-codec"/></svg><span id="ff-label">FFmpeg</span><span id="ff-pct"></span>
+      <button type="button" class="icon-btn" id="ff-cancel" title="Cancelar" onclick="VW.app && (VW.app.ffmpeg.cancel(), VW.app.showFFProgress(null))"><svg class="ico"><use href="#i-close"/></svg></button></div>
+    <div class="f-progress"><div id="ff-bar" class="f-progress-bar"></div></div>
+  </div>
+  <div id="toasts" class="toasts" aria-live="assertive"></div>
+  <div id="windows"></div>
+
+  <noscript><div class="fatal">O VLC Web precisa de JavaScript habilitado.</div></noscript>
+
+  <script src="js/core/util.js"></script>
+  <script src="js/core/settings.js"></script>
+  <script src="js/core/logger.js"></script>
+  <script src="js/media/metadata.js"></script>
+  <script src="js/media/subtitles.js"></script>
+  <script src="js/media/audio-engine.js"></script>
+  <script src="js/media/video-renderer.js"></script>
+  <script src="js/media/visualizer.js"></script>
+  <script src="js/media/ffmpeg-engine.js"></script>
+  <script src="js/media/playlist.js"></script>
+  <script src="js/media/library.js"></script>
+  <script src="js/media/player.js"></script>
+  <script src="js/media/recorder.js"></script>
+  <script src="js/ui/win.js"></script>
+  <script src="js/ui/menu.js"></script>
+  <script src="js/ui/actions.js"></script>
+  <script src="js/ui/controls.js"></script>
+  <script src="js/ui/playlist-view.js"></script>
+  <script src="js/ui/dialogs-open.js"></script>
+  <script src="js/ui/dialogs-effects.js"></script>
+  <script src="js/ui/dialogs-prefs.js"></script>
+  <script src="js/ui/dialogs-info.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

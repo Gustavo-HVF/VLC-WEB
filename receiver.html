@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Receptor de transmissão — VLC Web</title>
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <style>
+    :root { color-scheme: dark; --accent: #ff8800; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #000; color: #eee; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+    #status { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; padding: 24px 28px; background: rgba(30,30,34,.92); border-radius: 12px; max-width: 90vw; }
+    #status h1 { margin: 0 0 8px; font-size: 18px; color: var(--accent); }
+    #status.hidden { display: none; }
+    #bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 8px; align-items: center; padding: 10px 16px; background: linear-gradient(transparent, rgba(0,0,0,.8)); opacity: 0; transition: opacity .2s; }
+    body:hover #bar { opacity: 1; }
+    button { background: #2b2d31; color: #eee; border: 1px solid #444; border-radius: 6px; padding: 6px 12px; cursor: pointer; font: inherit; }
+    button:hover { border-color: var(--accent); }
+    #title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <video id="v" autoplay playsinline controls></video>
+  <div id="status"><h1>Receptor VLC Web</h1><div id="msg">Conectando…</div></div>
+  <div id="bar"><span id="title"></span><button id="fs" type="button">Tela cheia</button></div>
+  <script>
+    (function () {
+      'use strict';
+      var params = new URLSearchParams(location.search);
+      var canal = params.get('canal');
+      var msg = document.getElementById('msg'), status = document.getElementById('status'), video = document.getElementById('v');
+      document.getElementById('fs').onclick = function () { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); };
+      if (!canal) { msg.textContent = 'Nenhum canal informado. Abra este receptor pelo diálogo Mídia → Transmitir do VLC Web.'; return; }
+      if (!window.BroadcastChannel || !window.RTCPeerConnection) { msg.textContent = 'Este navegador não suporta WebRTC/BroadcastChannel.'; return; }
+      var id = 'rx-' + Math.random().toString(36).slice(2, 9);
+      var ch = new BroadcastChannel('vlcweb-stream:' + canal);
+      var pc = null;
+      function post(m) { m.from = id; ch.postMessage(m); }
+      function join() { msg.textContent = 'Aguardando o transmissor no canal "' + canal + '"…'; post({ type: 'join' }); }
+      ch.onmessage = async function (e) {
+        var m = e.data;
+        if (!m || m.from === id) return;
+        if (m.type === 'server-up') join();
+        if (m.type === 'server-down') { status.classList.remove('hidden'); msg.textContent = 'A transmissão foi encerrada.'; if (pc) pc.close(); pc = null; }
+        if (m.to !== id) return;
+        if (m.type === 'offer') {
+          if (pc) pc.close();
+          pc = new RTCPeerConnection({ iceServers: [] });
+          pc.ontrack = function (ev) {
+            if (video.srcObject === ev.streams[0]) return;
+            video.srcObject = ev.streams[0];
+            status.classList.add('hidden');
+            video.play().catch(function (err) {
+              if (err.name === 'AbortError') return;
+              // reprodução automática com som bloqueada: inicia sem som e pede um clique
+              video.muted = true;
+              video.play().catch(function () {});
+              msg.textContent = 'Clique para ativar o som';
+              status.classList.remove('hidden');
+            });
+          };
+          pc.onicecandidate = function (ev) { if (ev.candidate) post({ type: 'ice', to: 'server', candidate: ev.candidate.toJSON() }); };
+          pc.onconnectionstatechange = function () { if (pc && pc.connectionState === 'failed') { status.classList.remove('hidden'); msg.textContent = 'Falha na conexão.'; } };
+          await pc.setRemoteDescription(m.sdp);
+          var ans = await pc.createAnswer();
+          await pc.setLocalDescription(ans);
+          post({ type: 'answer', to: 'server', sdp: pc.localDescription.toJSON() });
+          document.getElementById('title').textContent = m.title || '';
+          document.title = (m.title ? m.title + ' — ' : '') + 'Receptor VLC Web';
+        }
+        if (m.type === 'ice' && pc && m.candidate) { try { await pc.addIceCandidate(m.candidate); } catch (err) { /* ignora */ } }
+      };
+      status.onclick = function () { video.muted = false; video.play(); if (video.srcObject) status.classList.add('hidden'); };
+      window.addEventListener('beforeunload', function () { post({ type: 'leave' }); });
+      join();
+    })();
+  </script>
+</body>
+</html>
