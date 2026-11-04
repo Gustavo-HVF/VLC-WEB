@@ -577,11 +577,13 @@
     async addSubtitleFile(file) {
       if (!this.item) { this.emit('error', 'Abra uma mídia antes de adicionar a legenda.'); return; }
       try {
-        const t = await this.subs.addFile(file, { mediaName: this.item.name, fps: this.renderer.fps || undefined });
+        const t = await this.subs.addFile(file, { mediaName: this.item.name, label: file._label, fps: this.renderer.fps || undefined });
+        if (file._lang) t.lang = file._lang;
         this.item.subs.push(file);
         this.subs.setActive(t.id);
-        this.emit('osd', 'Legenda adicionada: ' + file.name);
-      } catch (e) { this.emit('error', e.message); }
+        this.emit('osd', 'Legenda adicionada: ' + (file._label || file.name));
+        return t;
+      } catch (e) { this.emit('error', e.message); return null; }
     }
 
     /* ======================= controles ======================= */

@@ -20,6 +20,8 @@
       });
       this.recorder = new VW.Recorder(this.player, this.settings, this.log);
       this.streamServer = new VW.LocalStreamServer(this.player, this.log);
+      this.subSearch = new VW.SubSearch(this.settings, this.log);
+      this.translator = new VW.SubtitleTranslator(this.settings, this.log);
       this.actions = new VW.ui.Actions(this.settings);
       this.dialogs = {
         open: tab => VW.dialogsOpen.openMedia(this, tab),
@@ -36,7 +38,9 @@
         help: () => VW.dialogsInfo.help(this),
         about: () => VW.dialogsInfo.about(this),
         skins: tab => VW.dialogsSkins.gallery(this, tab),
-        audioDiag: () => VW.dialogsAudio.diagnostics(this)
+        audioDiag: () => VW.dialogsAudio.diagnostics(this),
+        subSearch: tab => VW.dialogsSubs.search(this, tab),
+        subTranslate: () => VW.dialogsSubs.translate(this)
       };
       this.defineActions();
       this.menu = new VW.ui.MenuSystem(U.$('#menubar'), this.menuDefs(), id => this.actions.shortcutLabel(id));
@@ -144,6 +148,8 @@
 
       // Legendas
       def('add-subtitle', 'Adicionar arquivo de legenda…', () => this.pickSubtitle(), ['Ctrl+Shift+S'], 'Legendas');
+      def('sub-search', 'Buscar legendas online…', () => this.dialogs.subSearch('search'), ['Alt+B'], 'Legendas');
+      def('sub-translate', 'Traduzir legenda…', () => this.dialogs.subTranslate(), ['Alt+T'], 'Legendas');
       def('sub-track-cycle', 'Alternar faixa de legenda', () => { const t = p.subs.cycle(1); this.controls.osd('Legenda: ' + (t ? t.label : 'desativada')); }, ['V'], 'Legendas');
       def('sub-track-cycle-rev', 'Alternar faixa de legenda (inverso)', () => { const t = p.subs.cycle(-1); this.controls.osd('Legenda: ' + (t ? t.label : 'desativada')); }, ['Alt+V'], 'Legendas');
       def('sub-toggle', 'Ativar/desativar legendas', () => this.toggleSubs(), ['Ctrl+Alt+V'], 'Legendas');
@@ -321,6 +327,8 @@
         ],
         subtitle: () => [
           item('Adicionar arquivo de legenda…', 'add-subtitle', { icon: 'subtitle', disabled: !p.item }),
+          item('Buscar legendas online (OpenSubtitles, SubDL, SubSource)…', 'sub-search', { icon: 'network' }),
+          item('Traduzir legenda (ex.: inglês → português)…', 'sub-translate', { icon: 'convert', disabled: !p.subs.tracks.length }),
           { label: 'Faixa de legenda', submenu: subTracks },
           { label: 'Extrair legendas embutidas (MKV/MP4) com FFmpeg', icon: 'codec', disabled: !(p.item && p.item.file), action: () => this.extractSubs() },
           { sep: true },
@@ -507,6 +515,18 @@
      */
     openFiles(files, opts = {}) {
       const p = this.player;
+      // .zip baixado de sites de legendas: extrai as legendas e trata como arquivos soltos
+      const zips = files.filter(f => U.ext(f.file.name) === 'zip');
+      if (zips.length) {
+        const rest = files.filter(f => !zips.includes(f));
+        Promise.all(zips.map(z => VW.subsearch.extractAllSubtitles(z.file).catch(e => { this.error(z.file.name + ': ' + e.message); return []; })))
+          .then(lists => {
+            const subs = lists.flat().map(file => ({ file }));
+            if (!subs.length) this.error('Nenhuma legenda encontrada no arquivo .zip.');
+            if (subs.length || rest.length) this.openFiles(rest.concat(subs), opts); // legendas e vídeos juntos são pareados pelo nome
+          });
+        return [];
+      }
       const media = [], subs = [], lists = [];
       for (const f of files) {
         const k = U.kindOf(f.file.name, f.file.type);
