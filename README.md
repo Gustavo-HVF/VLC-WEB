@@ -60,6 +60,16 @@ Abrir o `index.html` direto do disco (`file://`) funciona para o básico, mas o 
 - Carregamento automático de legendas com o mesmo nome do vídeo e detecção de codificação (UTF-8, Windows-1252 e outras 25).
 - **Atraso** (G/H), velocidade, fator de duração e **sincronização assistida** (Shift+H, Shift+J, Shift+K), com exportação da legenda já sincronizada.
 - Aparência configurável: fonte, tamanho, cor, opacidade, contorno, sombra, fundo e posição.
+- **Buscar legendas online** (*Legenda → Buscar legendas online*, `Alt+B`) no **OpenSubtitles**, no **SubDL** e no **SubSource**, como a extensão VLsub do VLC:
+  - o título, o ano, a temporada e o episódio são extraídos do nome do arquivo;
+  - a busca pelo *hash* do arquivo (OpenSubtitles) encontra a legenda sincronizada com a versão exata do vídeo;
+  - permite filtrar por idioma e baixa com um clique; em pacotes .zip de temporada, escolhe o episódio certo.
+  - Cada site exige uma **chave de API gratuita**, criada na conta do próprio usuário (aba *Chaves de API*). Sem chave, o botão *Abrir no site* abre a busca no site. A legenda ou o .zip baixado pode ser arrastado para o reprodutor.
+- **Traduzir legenda** (*Legenda → Traduzir legenda*, `Alt+T`), por exemplo do inglês para o português:
+  - pelo **tradutor integrado do navegador** (Chrome/Edge 138+, roda no próprio computador e não envia a legenda para a internet);
+  - pelo **MyMemory** (online e gratuito, com limite diário);
+  - ou por um servidor **LibreTranslate**.
+  - A faixa traduzida aparece na hora, começando pelo ponto atual do vídeo, mantém o itálico e as quebras de linha e pode ser salva como .srt.
 
 ### Temas (skins) e layouts
 - **31 temas visuais**, escolhidos na galeria (*Exibir → Tema → Galeria de temas e layouts*, `Alt+K`), com miniaturas, busca e filtros por estilo:
@@ -98,6 +108,7 @@ Abrir o `index.html` direto do disco (`file://`) funciona para o básico, mas o 
 | Lista de reprodução | `Ctrl+L` | Informações | `Ctrl+I` / `Ctrl+J` |
 | Interface mínima | `Ctrl+H` | Ajuda / Sobre | `F1` / `Shift+F1` |
 | Galeria de temas | `Alt+K` | Próximo tema / layout | `Ctrl+Alt+K` / `Alt+L` |
+| Buscar legendas online | `Alt+B` | Traduzir legenda | `Alt+T` |
 
 A lista completa fica em *Ajuda → Teclas de atalho* e pode ser alterada em *Preferências → Teclas de atalho*.
 
@@ -108,7 +119,8 @@ Algumas funções do VLC para computador dependem de acesso ao sistema que pági
 - protocolos RTSP, RTP/UDP, RTMP, MMS, SMB, FTP, UPnP/DLNA e SAP;
 - TV digital ou analógica, VLM e guia de programas;
 - servir transmissões HTTP para outros computadores (a transmissão é feita por WebRTC para abas do mesmo navegador ou por Chromecast/AirPlay);
-- papel de parede da área de trabalho e extensões em Lua (como o VLsub).
+- papel de parede da área de trabalho e extensões em Lua (a busca de legendas do VLsub foi reimplementada em JavaScript).
+- Os sites de legendas podem recusar o acesso direto pelo navegador (CORS). Nesse caso, use *Abrir no site* ou configure um proxy CORS de sua confiança.
 
 Também é preciso considerar que:
 - URLs de outros sites precisam permitir CORS para os efeitos de áudio/vídeo, a gravação e a conversão funcionarem;

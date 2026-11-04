@@ -80,6 +80,19 @@
     preferredSubLang: 'por,pt',
     subsDelayStep: 50,             // ms
 
+    /* Legendas online e tradução */
+    subsSearchLangs: ['pt-BR', 'en'],
+    subsProviders: ['opensubtitles', 'subdl', 'subsource'],
+    osApiKey: '', osToken: '', osUser: '', osBaseUrl: '',
+    subdlApiKey: '',
+    subsourceApiKey: '',
+    subsCorsProxy: '',
+    translateEngine: 'auto',       // auto | builtin | mymemory | libre
+    translateTarget: 'pt-BR',
+    mymemoryEmail: '',
+    libreUrl: 'https://libretranslate.com',
+    libreKey: '',
+
     /* Entrada / Codecs */
     imageDuration: 10,             // segundos (0 = infinito)
     jumpVeryShort: 3,

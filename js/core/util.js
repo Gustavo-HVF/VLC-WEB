@@ -228,6 +228,52 @@
     return U.decodeText(buf, encoding);
   };
 
+  /* ---------- Arquivos compactados ---------- */
+  U.isZip = b => b && b[0] === 0x50 && b[1] === 0x4B && (b[2] === 0x03 || b[2] === 0x05);
+  U.isRar = b => b && b[0] === 0x52 && b[1] === 0x61 && b[2] === 0x72 && b[3] === 0x21;
+  U.is7z = b => b && b[0] === 0x37 && b[1] === 0x7A && b[2] === 0xBC && b[3] === 0xAF;
+
+  /**
+   * Leitor de ZIP mínimo (armazenado ou "deflate"), usado para legendas baixadas compactadas.
+   * Retorna [{ name, size, data(): Promise<Uint8Array> }].
+   */
+  U.unzip = async function (blob) {
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    let eocd = -1;
+    for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) {
+      if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new Error('Arquivo ZIP inválido ou corrompido');
+    const count = dv.getUint16(eocd + 10, true);
+    let p = dv.getUint32(eocd + 16, true);
+    const entries = [];
+    for (let i = 0; i < count && p + 46 <= buf.length; i++) {
+      if (dv.getUint32(p, true) !== 0x02014b50) break;
+      const flags = dv.getUint16(p + 8, true), method = dv.getUint16(p + 10, true);
+      const csize = dv.getUint32(p + 20, true), usize = dv.getUint32(p + 24, true);
+      const nlen = dv.getUint16(p + 28, true), xlen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true);
+      const lho = dv.getUint32(p + 42, true);
+      const name = U.decodeText(buf.subarray(p + 46, p + 46 + nlen), (flags & 0x800) ? 'utf-8' : 'auto');
+      p += 46 + nlen + xlen + clen;
+      if (name.endsWith('/')) continue;
+      entries.push({
+        name, size: usize, encrypted: !!(flags & 1),
+        async data() {
+          if (flags & 1) throw new Error('ZIP protegido por senha');
+          const start = lho + 30 + dv.getUint16(lho + 26, true) + dv.getUint16(lho + 28, true);
+          const raw = buf.subarray(start, start + csize);
+          if (method === 0) return raw;
+          if (method !== 8) throw new Error('Método de compressão ZIP não suportado (' + method + ')');
+          if (!window.DecompressionStream) throw new Error('Este navegador não consegue descompactar ZIP');
+          const out = await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer();
+          return new Uint8Array(out);
+        }
+      });
+    }
+    return entries;
+  };
+
   /* ---------- Carregamento de scripts sob demanda ---------- */
   const scriptCache = {};
   U.loadScript = function (src) {
