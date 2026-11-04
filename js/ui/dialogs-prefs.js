@@ -25,8 +25,10 @@
     const sections = {
       interface: { label: 'Interface', icon: 'prefs', build: () => [
         F.group('Aparência',
-          sel('Tema:', 'theme', [['dark', 'Escuro'], ['light', 'Claro'], ['system', 'Seguir o sistema']]),
-          col('Cor de destaque:', 'accent'),
+          sel('Tema (skin):', 'skin', [['auto', 'Automático (claro/escuro do sistema)']].concat(VW.skins.SKINS.map(s => [s.id, s.name]))),
+          sel('Estrutura do layout:', 'layout', [['auto', 'Automático (definida pelo tema)']].concat(Object.entries(VW.skins.LAYOUTS).map(([id, l]) => [id, l.name]))),
+          el('div', { class: 'btn-row' }, F.button('Abrir galeria de temas e layouts…', () => { w.close(); app.dialogs.skins('skins'); }, 'small')),
+          F.row('Cor de destaque:', F.check('Personalizar', S.get('accentOverride'), v => S.set('accentOverride', v)), F.color(S.get('accent'), v => { S.set('accent', v); S.set('accentOverride', true); })),
           chk('Mostrar barra de status', 'showStatusbar'),
           chk('Mostrar controles avançados (gravar, capturar, A→B, quadro a quadro)', 'showAdvancedControls'),
           chk('Interface mínima (apenas vídeo)', 'minimalView'),

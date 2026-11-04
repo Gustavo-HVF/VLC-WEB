@@ -106,8 +106,13 @@
       const rz = U.$('#pl-resizer');
       let start = null;
       rz.addEventListener('pointerdown', e => { start = { x: e.clientX, w: this.panel.getBoundingClientRect().width }; rz.setPointerCapture(e.pointerId); document.body.classList.add('resizing'); });
-      rz.addEventListener('pointermove', e => { if (!start) return; const w = U.clamp(start.w - (e.clientX - start.x), 240, window.innerWidth * 0.8); this.panel.style.width = w + 'px'; });
-      rz.addEventListener('pointerup', () => { if (!start) return; start = null; document.body.classList.remove('resizing'); this.settings.set('playlistWidth', Math.round(this.panel.getBoundingClientRect().width)); this.p.renderer.layout(); });
+      rz.addEventListener('pointermove', e => {
+        if (!start) return;
+        const dir = document.documentElement.classList.contains('lay-left') ? -1 : 1; // lista à esquerda: arrasta para a direita
+        const w = U.clamp(start.w - dir * (e.clientX - start.x), 240, window.innerWidth * 0.8);
+        this.panel.style.width = w + 'px';
+      });
+      rz.addEventListener('pointerup', () => { if (!start) return; start = null; document.body.classList.remove('resizing'); this.settings.set('playlistWidth', Math.round(this.panel.getBoundingClientRect().width)); this.updateWidthVar(); this.p.renderer.layout(); });
       // janela flutuante (lista desencaixada)
       const head = U.$('#pl-head');
       let drag = null;
@@ -130,8 +135,15 @@
       this.panel.style.width = this.settings.get('playlistWidth') + 'px';
       if (docked) { this.panel.style.left = ''; this.panel.style.top = ''; }
       U.$('#pl-dock').title = docked ? 'Desencaixar (janela flutuante)' : 'Encaixar na janela principal';
+      this.updateWidthVar();
       setTimeout(() => this.p.renderer.layout(), 0);
       if (vis) setTimeout(() => this.scrollToCurrent(), 30);
+    }
+
+    /** Largura ocupada pela lista encaixada (usada para centralizar os controles no layout "Cinema"). */
+    updateWidthVar() {
+      const on = this.settings.get('playlistVisible') && this.settings.get('playlistDocked');
+      U.$('#app').style.setProperty('--pl-w', on ? this.settings.get('playlistWidth') + 'px' : '0px');
     }
 
     /* ======================= renderização ======================= */

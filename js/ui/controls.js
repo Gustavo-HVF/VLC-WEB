@@ -31,6 +31,8 @@
     subtitle: { icon: 'subtitle', label: 'Faixa de legenda', action: 'sub-track-cycle' },
     minimal: { icon: 'minimal', label: 'Interface mínima', action: 'minimal' },
     library: { icon: 'library', label: 'Biblioteca de mídia', action: 'library' },
+    skins: { icon: 'palette', label: 'Galeria de temas e layouts', action: 'skin-gallery' },
+    layout: { icon: 'layout', label: 'Próxima estrutura de layout', action: 'layout-cycle' },
     sep: { sep: true, label: '— Separador —' },
     spacer: { spacer: true, label: '⟷ Espaço expansível' },
     volume: { volume: true, label: 'Controle de volume' },
@@ -253,6 +255,7 @@
       p.on('time', () => this.renderTime());
       p.on('duration', () => { this.renderTime(); this.renderMarks(); });
       p.on('state', s => {
+        if (this.wake) setTimeout(this.wake, 0);
         this.updateButtons();
         this.updateStageView();
         if (s === 'playing') this.flashCenter('play'); else if (s === 'paused') this.flashCenter('pause');
@@ -392,13 +395,16 @@
       const wake = () => {
         app.classList.remove('idle');
         clearTimeout(t);
-        if (document.fullscreenElement || app.classList.contains('minimal')) {
+        // no layout "cinema" os controles somem apenas durante a reprodução
+        const cinema = () => document.documentElement.classList.contains('lay-cinema') && app.classList.contains('is-playing');
+        if (document.fullscreenElement || app.classList.contains('minimal') || cinema()) {
           t = setTimeout(() => {
-            const still = document.fullscreenElement || app.classList.contains('minimal');
+            const still = document.fullscreenElement || app.classList.contains('minimal') || cinema();
             if (still && !U.$('#controls').matches(':hover') && !this.app.menu.isOpen) app.classList.add('idle');
           }, this.settings.get('fsControlsTimeout') * 1000);
         }
       };
+      this.wake = wake;
       document.addEventListener('pointermove', wake);
       document.addEventListener('keydown', wake);
       document.addEventListener('fullscreenchange', () => {

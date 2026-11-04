@@ -1,0 +1,837 @@
+/* VLC Web — temas visuais (skins), estruturas de layout e efeitos de fundo
+ * Cada tema define o conjunto completo de tokens no seletor [data-skin="id"], de modo que funcione
+ * tanto no documento quanto nas miniaturas da galeria. */
+
+/* =====================================================================
+ * Camada de efeitos de fundo (bolhas, nuvens, estrelas, chuva…)
+ * ===================================================================== */
+#skin-fx { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+#skin-fx::before, #skin-fx::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
+#app.is-playing ~ #skin-fx::before, #app.is-playing ~ #skin-fx::after { animation-play-state: paused; }
+@keyframes fx-rise { from { transform: translateY(0); } to { transform: translateY(-50%); } }
+@keyframes fx-fall { from { transform: translate(0, -50%); } to { transform: translate(-6%, 0); } }
+@keyframes fx-drift { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes fx-twinkle { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+@keyframes fx-grid { from { background-position: 0 0; } to { background-position: 0 64px; } }
+@keyframes fx-float { from { transform: translate(0, 0) rotate(0) scale(1); } to { transform: translate(6%, -5%) rotate(25deg) scale(1.12); } }
+@keyframes fx-flicker { 0%, 18%, 22%, 62%, 64%, 100% { opacity: 0; } 20%, 63% { opacity: 1; } }
+@keyframes fx-glitch { 0%, 92%, 100% { transform: none; text-shadow: 2px 0 #ff003c, -2px 0 #00f0ff; } 94% { transform: translateX(-3px) skewX(8deg); text-shadow: -4px 0 #ff003c, 4px 0 #00f0ff; } 96% { transform: translateX(3px); } }
+@keyframes fx-hue { to { filter: hue-rotate(360deg); } }
+
+/* Camadas reutilizáveis (definidas por variáveis em cada tema) */
+#skin-fx::before { background-image: var(--fx1, none); background-size: var(--fx1-size, auto); background-position: var(--fx1-pos, 0 0); }
+#skin-fx::after { background-image: var(--fx2, none); background-size: var(--fx2-size, auto); background-position: var(--fx2-pos, 0 0); }
+
+/* =====================================================================
+ * Estruturas de layout (classes no <html>)
+ * ===================================================================== */
+/* Moldura: o reprodutor vira uma janela sobre o papel de parede */
+.lay-framed .app { margin: 14px; height: calc(100vh - 28px); height: calc(100dvh - 28px); border-radius: var(--radius-win); overflow: hidden; border: var(--bw) solid var(--border); box-shadow: var(--shadow); }
+
+/* Cartões flutuantes */
+.lay-floating .menubar { margin: var(--gap) var(--gap) 0; border: var(--bw) solid var(--border); border-radius: var(--radius-menu); }
+.lay-floating .main { margin: var(--gap) var(--gap) 0; gap: var(--gap); }
+.lay-floating .stage { border-radius: var(--radius-win); border: var(--bw) solid var(--border); box-shadow: var(--shadow); }
+.lay-floating .playlist-panel:not(.floating) { border-radius: var(--radius-win); border: var(--bw) solid var(--border); box-shadow: var(--shadow); overflow: hidden; }
+.lay-floating .controls { margin: var(--gap); border: var(--bw) solid var(--border); border-radius: var(--radius-win); box-shadow: var(--shadow); }
+.lay-floating .statusbar { margin: calc(var(--gap) * -.4) var(--gap) var(--gap); border: var(--bw) solid var(--border); border-radius: var(--radius-sm); }
+.lay-floating.lay-framed .app { box-shadow: var(--shadow), inset 0 0 0 1px rgba(255, 255, 255, .06); }
+
+/* Compacto: uma só barra */
+.lay-compact .menubar { height: 26px; }
+.lay-compact .menubar-item { padding: 2px 8px; font-size: 12px; }
+.lay-compact .controls { display: flex; align-items: center; gap: 8px; padding: 2px 8px; }
+.lay-compact .seek-row { order: 2; flex: 1; min-width: 160px; }
+.lay-compact .bars { order: 1; flex-direction: row; align-items: center; }
+.lay-compact .toolbar { padding-top: 0; min-height: 36px; }
+.lay-compact .toolbar .tb-spacer { flex: 0 0 8px; }
+.lay-compact .tb-btn { width: 30px; height: 30px; }
+.lay-compact .tb-btn.big { width: 36px; height: 36px; }
+.lay-compact .vol-track { width: 80px; }
+.lay-compact .statusbar { display: none; }
+
+/* Cinema: controles sobre o vídeo */
+.lay-cinema .app { grid-template-rows: auto minmax(0, 1fr) 0 0; }
+.lay-cinema .statusbar { display: none; }
+.lay-cinema .controls { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(980px, calc(100% - 24px)); border: var(--bw) solid var(--border); border-radius: var(--radius-win); box-shadow: var(--shadow); transition: opacity .3s, transform .3s; }
+.lay-cinema .app.idle .controls { opacity: 0; transform: translate(-50%, 10px); pointer-events: none; }
+/* centraliza sobre o vídeo quando a lista encaixada está aberta (--pl-w é definido pela lista) */
+.lay-cinema .app .controls { left: calc((100% - var(--pl-w, 0px)) / 2); width: min(980px, calc(100% - var(--pl-w, 0px) - 24px)); }
+.lay-cinema.lay-left .app .controls { left: calc(var(--pl-w, 0px) + (100% - var(--pl-w, 0px)) / 2); }
+@media (max-width: 860px) { .lay-cinema .app .controls, .lay-cinema.lay-left .app .controls { left: 50%; width: calc(100% - 24px); } }
+.lay-cinema .playlist-panel:not(.floating) { margin-bottom: 0; }
+
+/* Lista à esquerda */
+.lay-left .main { flex-direction: row-reverse; }
+.lay-left .playlist-panel:not(.floating) { border-left: 0; border-right: var(--bw) solid var(--border); }
+.lay-left.lay-floating .playlist-panel:not(.floating) { border: var(--bw) solid var(--border); }
+.lay-left .pl-resizer { left: auto; right: -3px; }
+
+/* Controles centralizados */
+.lay-center .toolbar { justify-content: center; }
+.lay-center .toolbar .tb-spacer { flex: 0 0 22px; }
+.lay-center .seek-row { width: min(1100px, 100%); margin: 0 auto; }
+
+/* Tela cheia e interface mínima ignoram a estrutura escolhida */
+:root .app.fullscreen, :root .app.minimal { margin: 0; height: 100vh; height: 100dvh; border: 0; border-radius: 0; }
+:root .app.fullscreen .main, :root .app.minimal .main { margin: 0; }
+:root .app.fullscreen .stage, :root .app.minimal .stage { border: 0; border-radius: 0; box-shadow: none; }
+:root .app.fullscreen .controls, :root .app.minimal .controls { margin: 0; }
+
+@media (max-width: 600px) {
+  :root { --gap: 6px; }
+  .lay-framed .app { margin: 0; height: 100vh; height: 100dvh; border-radius: 0; border: 0; }
+  .lay-compact .controls { flex-wrap: wrap; }
+  .lay-compact .seek-row { order: 0; flex-basis: 100%; }
+}
+
+/* =====================================================================
+ * TEMAS
+ * ===================================================================== */
+
+/* ---------- VLC Web claro ---------- */
+[data-skin="light"] {
+  color-scheme: light;
+  --accent: #ff8800; --accent-text: #fff;
+  --bg: #eceef1; --bg2: #f8f9fa; --panel: #ffffff; --panel2: #f1f2f4; --border: #d4d6db;
+  --text: #1c1d20; --muted: #646a73; --hover: rgba(0, 0, 0, .06); --sel: rgba(255, 136, 0, .16);
+  --input: #fff; --track: rgba(0, 0, 0, .14); --shadow: 0 12px 34px rgba(0, 0, 0, .18);
+  --welcome-bg: radial-gradient(ellipse at 50% 35%, #fff3e2 0%, #e4e7ec 70%);
+  --welcome-text: #1c1d20; --welcome-muted: #5d636c;
+  --welcome-btn-bg: rgba(255, 255, 255, .85); --welcome-btn-border: #d4d6db; --welcome-btn-text: #1c1d20;
+  --stage-audio-bg: radial-gradient(circle at 50% 30%, #ffffff, #d9dde4 75%);
+  --art-text: #1c1d20; --art-muted: #5d636c;
+  --play-shadow: 0 2px 8px rgba(255, 136, 0, .35);
+}
+
+/* ---------- Vidro (Glassmorphism) ---------- */
+[data-skin="glass"] {
+  color-scheme: dark;
+  --accent: #7ce0ff; --accent-text: #07111f;
+  --bg: rgba(15, 18, 40, .35); --bg2: rgba(255, 255, 255, .08); --panel: rgba(36, 40, 76, .5); --panel2: rgba(255, 255, 255, .1);
+  --border: rgba(255, 255, 255, .24); --text: #fff; --muted: rgba(255, 255, 255, .72); --hover: rgba(255, 255, 255, .14); --sel: rgba(124, 224, 255, .26);
+  --input: rgba(255, 255, 255, .1); --track: rgba(255, 255, 255, .25); --shadow: 0 16px 40px rgba(8, 8, 40, .45);
+  --glass: blur(22px) saturate(170%);
+  --wallpaper: radial-gradient(circle at 12% 18%, #ff5fa2 0, transparent 34%), radial-gradient(circle at 88% 12%, #5f7bff 0, transparent 38%), radial-gradient(circle at 75% 88%, #20e3b2 0, transparent 36%), radial-gradient(circle at 22% 85%, #ffb547 0, transparent 32%), linear-gradient(135deg, #1d1b4b, #0e2a47);
+  --menubar-bg: rgba(255, 255, 255, .08); --controls-bg: rgba(255, 255, 255, .1); --statusbar-bg: rgba(255, 255, 255, .06);
+  --pl-bg: rgba(255, 255, 255, .08); --pl-head-bg: rgba(255, 255, 255, .06);
+  --win-bg: rgba(40, 44, 84, .55); --win-title-bg: rgba(255, 255, 255, .08); --menu-bg: rgba(40, 44, 84, .62);
+  --menu-sel-bg: rgba(255, 255, 255, .22); --menu-sel-text: #fff;
+  --btn-bg: rgba(255, 255, 255, .12); --btn-primary-bg: rgba(124, 224, 255, .85);
+  --play-bg: rgba(255, 255, 255, .22); --play-text: #fff; --play-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), 0 6px 20px rgba(0, 0, 0, .3);
+  --seek-fill: linear-gradient(90deg, #ff5fa2, #7ce0ff);
+  --stage-bg: rgba(0, 0, 0, .78); --stage-idle-bg: rgba(255, 255, 255, .04); --stage-audio-bg: rgba(10, 12, 34, .3);
+  --welcome-bg: transparent; --welcome-btn-bg: rgba(255, 255, 255, .12); --welcome-btn-border: rgba(255, 255, 255, .3);
+  --welcome-muted: rgba(255, 255, 255, .88); --text-shadow: 0 1px 4px rgba(10, 10, 50, .5);
+  --radius-win: 20px; --radius-menu: 14px; --radius-sm: 10px;
+  --fx1: radial-gradient(circle at 30% 35%, rgba(255, 95, 162, .55), transparent 28%), radial-gradient(circle at 70% 60%, rgba(32, 227, 178, .45), transparent 30%), radial-gradient(circle at 55% 20%, rgba(95, 123, 255, .5), transparent 26%);
+}
+[data-skin="glass"] #skin-fx::before { inset: -20%; filter: blur(40px); animation: fx-float 26s ease-in-out infinite alternate; }
+[data-skin="glass"] .tb-btn.big { border: 1px solid rgba(255, 255, 255, .5); }
+
+/* ---------- Frutiger Aero ---------- */
+[data-skin="aero"] {
+  color-scheme: light;
+  --font: "Segoe UI", Frutiger, "Frutiger Linotype", "Myriad Pro", Nunito, Tahoma, sans-serif;
+  --accent: #1593e6; --accent-text: #fff;
+  --bg: #d9f1ff; --bg2: rgba(255, 255, 255, .6); --panel: rgba(255, 255, 255, .74); --panel2: rgba(232, 247, 255, .86);
+  --border: rgba(255, 255, 255, .92); --text: #0b2a44; --muted: #3c6787; --hover: rgba(21, 147, 230, .12); --sel: rgba(21, 147, 230, .2);
+  --input: rgba(255, 255, 255, .92); --track: rgba(11, 42, 68, .18); --shadow: 0 10px 30px rgba(0, 70, 140, .25), 0 0 0 1px rgba(0, 90, 160, .16);
+  --glass: blur(14px) saturate(150%);
+  --wallpaper: radial-gradient(ellipse 120% 55% at 25% 112%, #79db4f 0 40%, transparent 41%), radial-gradient(ellipse 110% 50% at 88% 118%, #3fae2a 0 44%, transparent 45%), radial-gradient(circle at 82% 16%, rgba(255, 255, 255, .95) 0 5%, rgba(255, 255, 255, 0) 20%), linear-gradient(#2a9ae4 0%, #8dd2ff 45%, #e2f5ff 72%);
+  --menubar-bg: linear-gradient(rgba(255, 255, 255, .88), rgba(212, 238, 255, .78));
+  --controls-bg: linear-gradient(rgba(255, 255, 255, .82) 0%, rgba(222, 243, 255, .72) 50%, rgba(192, 229, 255, .72) 51%, rgba(226, 246, 255, .82) 100%);
+  --statusbar-bg: rgba(255, 255, 255, .58);
+  --pl-bg: rgba(255, 255, 255, .62); --pl-head-bg: linear-gradient(rgba(255, 255, 255, .88), rgba(210, 236, 255, .82));
+  --win-bg: rgba(240, 250, 255, .84);
+  --win-title-bg: linear-gradient(#ffffff 0%, #d9f0ff 49%, #b5e1ff 50%, #e6f6ff 100%); --win-title-text: #0b3a5e;
+  --menu-bg: rgba(245, 251, 255, .93); --menu-sel-bg: linear-gradient(#c4e8ff, #8fd0ff); --menu-sel-text: #06243b;
+  --btn-bg: linear-gradient(#ffffff 0%, #e8f6ff 49%, #cbeaff 50%, #ebf8ff 100%); --btn-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(0, 60, 120, .25);
+  --btn-primary-bg: linear-gradient(#80d1ff 0%, #2aa4f0 49%, #0b86d6 50%, #3cb3f5 100%);
+  --play-bg: radial-gradient(circle at 50% 28%, #ecffd6 0%, #93e15e 32%, #3fae1f 70%, #2a8a12 100%); --play-text: #fff;
+  --play-shadow: 0 3px 10px rgba(30, 120, 10, .45), inset 0 -3px 6px rgba(0, 60, 0, .25);
+  --seek-fill: linear-gradient(#a6e3ff, #1593e6);
+  --stage-idle-bg: transparent; --stage-audio-bg: rgba(255, 255, 255, .2);
+  --welcome-bg: transparent; --welcome-text: #06304f; --welcome-muted: #1d4f75;
+  --welcome-btn-bg: linear-gradient(#ffffff, #d5efff); --welcome-btn-border: #fff; --welcome-btn-text: #06304f;
+  --text-shadow: 0 1px 0 rgba(255, 255, 255, .85);
+  --art-text: #06304f; --art-muted: #24557c;
+  --radius-win: 12px; --radius-sm: 8px;
+  --fx1: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, .95) 0 3px, rgba(255, 255, 255, .28) 4px 22px, rgba(255, 255, 255, .75) 23px 24px, transparent 25px), radial-gradient(circle at 30% 30%, rgba(255, 255, 255, .9) 0 2px, rgba(255, 255, 255, .25) 3px 11px, rgba(255, 255, 255, .7) 12px 13px, transparent 14px), radial-gradient(circle at 30% 30%, rgba(255, 255, 255, .9) 0 2px, rgba(190, 240, 255, .25) 3px 15px, rgba(255, 255, 255, .7) 16px 17px, transparent 18px);
+  --fx1-size: 26vw 25%, 17vw 12.5%, 38vw 25%;
+  --fx1-pos: 4vw 0, 11vw 0, 22vw 0;
+  --fx2: radial-gradient(ellipse 60% 18% at 20% 8%, rgba(255, 255, 255, .55), transparent 70%), conic-gradient(from 200deg at 82% 12%, transparent 0 8deg, rgba(255, 255, 255, .18) 10deg 16deg, transparent 18deg 30deg, rgba(255, 255, 255, .12) 32deg 36deg, transparent 38deg);
+}
+[data-skin="aero"] #skin-fx::before { bottom: auto; height: 200%; background-repeat: repeat; animation: fx-rise 70s linear infinite; }
+[data-skin="aero"] .tb-btn.big::after, [data-skin="y2k"] .tb-btn.big::after { content: ""; position: absolute; left: 18%; right: 18%; top: 6%; height: 42%; border-radius: 50%; background: linear-gradient(rgba(255, 255, 255, .9), rgba(255, 255, 255, 0)); pointer-events: none; }
+[data-skin="aero"] .win-title, [data-skin="aero"] .menubar { text-shadow: 0 1px 0 #fff; }
+
+/* ---------- Dreamcore ---------- */
+[data-skin="dreamcore"] {
+  color-scheme: light;
+  --font: Quicksand, Nunito, "Trebuchet MS", sans-serif; --heading-font: Quicksand, "Trebuchet MS", sans-serif;
+  --accent: #ff6fc3; --accent-text: #fff;
+  --bg: #fde7f6; --bg2: rgba(255, 255, 255, .55); --panel: rgba(255, 250, 255, .8); --panel2: rgba(255, 232, 248, .86);
+  --border: rgba(255, 170, 220, .78); --text: #5b3a73; --muted: #9a74b5; --hover: rgba(255, 115, 198, .12); --sel: rgba(173, 216, 255, .5);
+  --input: rgba(255, 255, 255, .92); --track: rgba(155, 116, 181, .22); --shadow: 0 12px 34px rgba(190, 120, 200, .32);
+  --glass: blur(10px) saturate(130%);
+  --wallpaper: linear-gradient(180deg, #a6d6ff 0%, #d9c9ff 30%, #ffd0ef 58%, #fff2c2 100%);
+  --menubar-bg: rgba(255, 255, 255, .55); --controls-bg: rgba(255, 255, 255, .6); --statusbar-bg: rgba(255, 255, 255, .45);
+  --pl-bg: rgba(255, 255, 255, .55); --pl-head-bg: rgba(255, 235, 250, .72);
+  --win-bg: rgba(255, 250, 255, .86); --win-title-bg: linear-gradient(90deg, #ffd1f0, #d7c4ff, #b9e6ff); --win-title-text: #5b3a73;
+  --menu-bg: rgba(255, 250, 255, .93); --menu-sel-bg: linear-gradient(90deg, #ffb3e1, #c9b6ff); --menu-sel-text: #3d2457;
+  --btn-bg: rgba(255, 255, 255, .86); --btn-primary-bg: linear-gradient(90deg, #ff9ad5, #b99cff);
+  --play-bg: linear-gradient(135deg, #ff9ad5, #a99cff 60%, #8fd3ff); --play-shadow: 0 0 18px rgba(255, 150, 220, .75);
+  --seek-fill: linear-gradient(90deg, #ff9ad5, #ffd36e, #9be7a6, #8fd3ff, #c9a2ff);
+  --stage-idle-bg: transparent; --stage-audio-bg: rgba(255, 255, 255, .16);
+  --welcome-bg: transparent; --welcome-text: #6a3f86; --welcome-muted: #8d68aa;
+  --welcome-btn-bg: rgba(255, 255, 255, .72); --welcome-btn-border: #ffc2e7; --welcome-btn-text: #5b3a73;
+  --art-text: #5b3a73; --art-muted: #8d68aa;
+  --text-shadow: 0 0 14px rgba(255, 255, 255, .95);
+  --radius-win: 24px; --radius-menu: 18px; --radius-sm: 14px;
+  --fx1: radial-gradient(ellipse 9% 5% at 22% 30%, rgba(255, 255, 255, .95) 55%, transparent 60%), radial-gradient(ellipse 7% 6% at 27% 27%, rgba(255, 255, 255, .95) 55%, transparent 60%), radial-gradient(ellipse 8% 4% at 31% 31%, rgba(255, 255, 255, .9) 55%, transparent 60%), radial-gradient(ellipse 11% 5% at 70% 62%, rgba(255, 255, 255, .85) 55%, transparent 60%), radial-gradient(ellipse 7% 6% at 75% 58%, rgba(255, 255, 255, .85) 55%, transparent 60%);
+  --fx1-size: 50% 100%;
+  --fx2: radial-gradient(circle, #fff 0 1.5px, transparent 2.5px), radial-gradient(circle, rgba(255, 240, 160, .95) 0 1.5px, transparent 2.5px);
+  --fx2-size: 170px 150px, 230px 210px;
+  --fx2-pos: 20px 30px, 90px 120px;
+}
+[data-skin="dreamcore"] #skin-fx::before { right: auto; width: 200%; animation: fx-drift 140s linear infinite; }
+[data-skin="dreamcore"] #skin-fx::after { animation: fx-twinkle 4s ease-in-out infinite; }
+[data-skin="dreamcore"] .welcome h1 { background: linear-gradient(90deg, #ff6fc3, #a98bff, #57c4ff); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; }
+[data-skin="dreamcore"] .win-title-text::before { content: "✧ "; color: #ff6fc3; }
+
+/* ---------- Vaporwave ---------- */
+[data-skin="vaporwave"] {
+  color-scheme: dark;
+  --font: Tahoma, Verdana, "Segoe UI", sans-serif; --heading-font: "Times New Roman", Times, serif;
+  --accent: #ff71ce; --accent-text: #1a0033;
+  --bg: #1a0b2e; --bg2: #2b1055; --panel: #24104a; --panel2: #34186b; --border: #01cdfe; --text: #fdf2ff; --muted: #c2b0ea;
+  --hover: rgba(1, 205, 254, .16); --sel: rgba(255, 113, 206, .28); --input: #170833; --track: rgba(185, 103, 255, .38);
+  --shadow: 6px 6px 0 rgba(1, 205, 254, .55);
+  --wallpaper: linear-gradient(180deg, #120526 0%, #3b1263 38%, #b5389a 58%, #ff9a8b 64%, #20093d 64.4%, #0d0420 100%);
+  --menubar-bg: linear-gradient(90deg, #ff71ce, #b967ff 50%, #01cdfe); --menubar-text: #1a0033;
+  --controls-bg: rgba(26, 11, 46, .9); --statusbar-bg: #120526; --pl-head-bg: #2b1055;
+  --win-title-bg: linear-gradient(90deg, #ff71ce, #01cdfe); --win-title-text: #1a0033;
+  --menu-sel-bg: #01cdfe; --menu-sel-text: #1a0033;
+  --btn-primary-bg: linear-gradient(90deg, #ff71ce, #b967ff);
+  --play-bg: linear-gradient(135deg, #ff71ce, #01cdfe); --play-text: #1a0033; --play-shadow: 0 0 16px rgba(255, 113, 206, .8);
+  --seek-fill: linear-gradient(90deg, #ff71ce, #b967ff, #01cdfe);
+  --stage-idle-bg: transparent; --welcome-bg: transparent;
+  --welcome-text: #fff; --welcome-muted: #fff0fb; --welcome-btn-bg: rgba(26, 11, 46, .75); --welcome-btn-border: #01cdfe; --welcome-btn-text: #fff;
+  --text-shadow: 3px 3px 0 #b967ff;
+  --radius-win: 0px; --radius-menu: 0px; --radius-sm: 0px; --bw: 2px;
+  --fx2: linear-gradient(rgba(255, 113, 206, .85) 2px, transparent 2px), linear-gradient(90deg, rgba(255, 113, 206, .85) 2px, transparent 2px);
+  --fx2-size: 64px 64px;
+}
+[data-skin="vaporwave"] #skin-fx::before { inset: auto; left: 50%; top: 17%; width: 36vmin; height: 36vmin; transform: translateX(-50%); border-radius: 50%; background: linear-gradient(#ffe259, #ff4f9a 72%);
+  -webkit-mask-image: linear-gradient(#000 52%, transparent 52% 55%, #000 55% 63%, transparent 63% 67%, #000 67% 74%, transparent 74% 79%, #000 79% 85%, transparent 85% 91%, #000 91%);
+  mask-image: linear-gradient(#000 52%, transparent 52% 55%, #000 55% 63%, transparent 63% 67%, #000 67% 74%, transparent 74% 79%, #000 79% 85%, transparent 85% 91%, #000 91%); }
+[data-skin="vaporwave"] #skin-fx::after, [data-skin="synthwave"] #skin-fx::after { inset: auto; left: -50%; right: -50%; top: 64%; height: 80%; transform: perspective(280px) rotateX(72deg); transform-origin: top; animation: fx-grid 2.4s linear infinite; -webkit-mask-image: linear-gradient(transparent, #000 25%); mask-image: linear-gradient(transparent, #000 25%); }
+[data-skin="vaporwave"] .welcome h1 { font-style: italic; letter-spacing: .25em; font-size: 38px; }
+[data-skin="vaporwave"] .win-title, [data-skin="vaporwave"] .menubar-item { font-weight: 700; }
+
+/* ---------- Synthwave ---------- */
+[data-skin="synthwave"] {
+  color-scheme: dark;
+  --heading-font: Orbitron, "Segoe UI", sans-serif;
+  --accent: #ff2a6d; --accent-text: #fff;
+  --bg: #120022; --bg2: #1b0436; --panel: #1d0638; --panel2: #2a0b4d; --border: #ff2a6d; --text: #f6e7ff; --muted: #b9a2d8;
+  --hover: rgba(5, 217, 232, .14); --sel: rgba(255, 42, 109, .25); --input: #12002a; --track: rgba(5, 217, 232, .3);
+  --shadow: 0 0 0 1px rgba(255, 42, 109, .5), 0 0 24px rgba(255, 42, 109, .35);
+  --wallpaper: radial-gradient(ellipse 80% 30% at 50% 64%, rgba(255, 42, 109, .55), transparent 70%), linear-gradient(180deg, #08001a 0%, #1d0042 50%, #3b0a5c 63.5%, #05000f 64%);
+  --menubar-bg: rgba(18, 0, 34, .92); --controls-bg: rgba(18, 0, 34, .9); --statusbar-bg: #0c0018; --pl-bg: rgba(29, 6, 56, .92);
+  --win-title-bg: linear-gradient(90deg, #2a0b4d, #4b0f6b); --menu-bg: rgba(24, 2, 46, .96);
+  --menu-sel-bg: linear-gradient(90deg, #ff2a6d, #ff9e2c); --menu-sel-text: #fff;
+  --btn-bg: #24083f; --btn-shadow: 0 0 10px rgba(5, 217, 232, .25); --btn-primary-bg: linear-gradient(90deg, #ff2a6d, #ff9e2c);
+  --play-bg: linear-gradient(135deg, #ff2a6d, #ff9e2c); --play-shadow: 0 0 22px rgba(255, 42, 109, .9);
+  --seek-fill: linear-gradient(90deg, #05d9e8, #ff2a6d);
+  --stage-idle-bg: transparent; --welcome-bg: transparent;
+  --welcome-text: #fff; --welcome-muted: #d8c4f0; --welcome-btn-bg: rgba(29, 6, 56, .8); --welcome-btn-border: #05d9e8; --welcome-btn-text: #fff;
+  --text-shadow: 0 0 12px rgba(255, 42, 109, .9);
+  --radius-win: 6px; --radius-sm: 4px;
+  --fx1: radial-gradient(circle, #fff 0 1px, transparent 1.5px);
+  --fx1-size: 90px 70px;
+  --fx2: linear-gradient(rgba(5, 217, 232, .8) 2px, transparent 2px), linear-gradient(90deg, rgba(5, 217, 232, .8) 2px, transparent 2px);
+  --fx2-size: 64px 64px;
+}
+[data-skin="synthwave"] #skin-fx::before { bottom: 38%; animation: fx-twinkle 5s ease-in-out infinite; }
+[data-skin="synthwave"] .tb-btn:hover, [data-skin="synthwave"] .tb-btn.on { color: #05d9e8; filter: drop-shadow(0 0 6px #05d9e8); }
+[data-skin="synthwave"] .welcome h1 { letter-spacing: .12em; text-transform: uppercase; }
+
+/* ---------- Cyberpunk ---------- */
+[data-skin="cyberpunk"] {
+  color-scheme: dark;
+  --font: "Share Tech Mono", "Consolas", monospace; --heading-font: "Share Tech Mono", monospace;
+  --accent: #fcee0a; --accent-text: #000;
+  --bg: #0b0b0f; --bg2: #101016; --panel: #121219; --panel2: #1a1a24; --border: #3b3b16; --text: #e9fbff; --muted: #8fa3ad;
+  --hover: rgba(0, 240, 255, .12); --sel: rgba(252, 238, 10, .2); --input: #08080b; --track: rgba(0, 240, 255, .25);
+  --shadow: 0 0 0 1px #fcee0a, 0 10px 30px rgba(0, 0, 0, .7);
+  --wallpaper: linear-gradient(135deg, #0b0b0f 0%, #121220 60%, #1d0a12 100%);
+  --menubar-bg: #000; --controls-bg: #0b0b0f; --statusbar-bg: #000;
+  --win-title-bg: #fcee0a; --win-title-text: #000; --menu-sel-bg: #00f0ff; --menu-sel-text: #000;
+  --btn-bg: #15151d; --play-bg: #fcee0a; --play-text: #000; --play-shadow: 0 0 14px rgba(252, 238, 10, .6); --play-radius: 0;
+  --seek-fill: linear-gradient(90deg, #ff003c, #fcee0a);
+  --welcome-bg: radial-gradient(ellipse at 50% 40%, #1d1d2a, #050507 70%); --welcome-btn-border: #fcee0a;
+  --radius-win: 0px; --radius-menu: 0px; --radius-sm: 0px;
+}
+[data-skin="cyberpunk"] .controls { border-top: 0; background-image: repeating-linear-gradient(-45deg, #fcee0a 0 10px, #0b0b0f 10px 20px); background-size: 100% 4px; background-repeat: no-repeat; }
+[data-skin="cyberpunk"] .btn, [data-skin="cyberpunk"] .tb-btn.big, [data-skin="cyberpunk"] .welcome .btn { clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+[data-skin="cyberpunk"] .win { clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px)); }
+[data-skin="cyberpunk"] .welcome h1 { text-transform: uppercase; letter-spacing: .2em; color: #fcee0a; animation: fx-glitch 3s infinite; }
+[data-skin="cyberpunk"] .menubar-item { text-transform: uppercase; letter-spacing: .06em; }
+
+/* ---------- Y2K cromado ---------- */
+[data-skin="y2k"] {
+  color-scheme: light;
+  --font: Verdana, Tahoma, "Segoe UI", sans-serif; --heading-font: "Arial Black", Verdana, sans-serif;
+  --accent: #7b5cff; --accent-text: #fff;
+  --bg: #dfe3ea; --bg2: #eef0f4; --panel: rgba(250, 251, 253, .92); --panel2: #e6e9ef; --border: #a9afbb; --text: #1e2230; --muted: #5d6475;
+  --hover: rgba(123, 92, 255, .1); --sel: rgba(123, 92, 255, .2); --input: #fff; --track: rgba(30, 34, 48, .16);
+  --shadow: 0 10px 30px rgba(60, 60, 120, .3);
+  --wallpaper: radial-gradient(circle at 15% 20%, rgba(255, 255, 255, .9), transparent 25%), linear-gradient(120deg, #bdf0ff, #f3d0ff 30%, #fff4c4 55%, #c4ffe2 80%, #c9d6ff);
+  --menubar-bg: linear-gradient(#ffffff, #dfe2e8 48%, #c9ced8 52%, #eceef2);
+  --controls-bg: linear-gradient(#fdfdfe, #dcdfe6 48%, #c5cad4 52%, #e9ebef);
+  --statusbar-bg: linear-gradient(#e9ebef, #cfd3db);
+  --win-title-bg: linear-gradient(#fdfdfe, #d6dae2 48%, #bfc5d0 52%, #e3e6ec);
+  --menu-sel-bg: linear-gradient(90deg, #ff9ff3, #a29bfe, #74b9ff); --menu-sel-text: #1e2230;
+  --btn-bg: linear-gradient(#ffffff, #dde0e7 48%, #c3c8d2 52%, #eef0f3); --btn-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(0, 0, 0, .2);
+  --btn-primary-bg: linear-gradient(#b9a8ff, #7b5cff 50%, #5b3cf0 51%, #9c88ff); --btn-primary-text: #fff;
+  --play-bg: radial-gradient(circle at 50% 30%, #ffffff, #c9b8ff 35%, #7b5cff 75%, #4a2fd1); --play-shadow: 0 3px 12px rgba(123, 92, 255, .5);
+  --seek-fill: linear-gradient(90deg, #ff9ff3, #feca57, #48dbfb, #1dd1a1, #a29bfe);
+  --stage-idle-bg: transparent; --stage-audio-bg: rgba(255, 255, 255, .25);
+  --welcome-bg: transparent; --welcome-text: #2a2050; --welcome-muted: #4c4470; --welcome-btn-bg: linear-gradient(#ffffff, #e2e5ec); --welcome-btn-border: #b8bdc8; --welcome-btn-text: #1e2230;
+  --art-text: #2a2050; --art-muted: #4c4470;
+  --radius-win: 16px; --radius-sm: 12px;
+}
+[data-skin="y2k"] .welcome h1 { background: linear-gradient(90deg, #ff5fd2, #7b5cff, #18c8ff, #1dd1a1); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* ---------- Alumínio escovado ---------- */
+[data-skin="aluminum"] {
+  color-scheme: light;
+  --font: "Lucida Grande", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --accent: #2b7de0; --accent-text: #fff;
+  --bg: #c9ccd1; --bg2: #d6d9dd; --panel: #e8eaed; --panel2: #d9dce0; --border: #8e939b; --text: #1d1f22; --muted: #4c5159;
+  --hover: rgba(0, 0, 0, .07); --sel: rgba(43, 125, 224, .22); --input: #fff; --track: rgba(0, 0, 0, .2);
+  --shadow: 0 10px 28px rgba(0, 0, 0, .35);
+  --wallpaper: repeating-linear-gradient(90deg, rgba(255, 255, 255, .08) 0 1px, rgba(0, 0, 0, .05) 1px 2px, rgba(255, 255, 255, .04) 2px 3px), linear-gradient(#d4d7db, #a9adb4);
+  --menubar-bg: repeating-linear-gradient(90deg, rgba(255, 255, 255, .1) 0 1px, rgba(0, 0, 0, .04) 1px 2px), linear-gradient(#eceef1, #c4c8ce);
+  --controls-bg: repeating-linear-gradient(90deg, rgba(255, 255, 255, .12) 0 1px, rgba(0, 0, 0, .05) 1px 2px), linear-gradient(#e2e4e8, #b5b9c0);
+  --statusbar-bg: linear-gradient(#c4c8ce, #aeb2b9);
+  --win-title-bg: repeating-linear-gradient(90deg, rgba(255, 255, 255, .1) 0 1px, rgba(0, 0, 0, .04) 1px 2px), linear-gradient(#eef0f2, #c3c7cd);
+  --pl-head-bg: linear-gradient(#e6e8eb, #cdd0d5);
+  --btn-bg: linear-gradient(#fdfdfd, #d9dce0); --btn-shadow: inset 0 1px 0 #fff, 0 1px 1px rgba(0, 0, 0, .3);
+  --btn-primary-bg: linear-gradient(#6fb1ff, #2b7de0); --tb-text: #2a2d31;
+  --play-bg: radial-gradient(circle at 50% 35%, #ffffff, #d5d8dc 45%, #9a9fa7 100%); --play-text: #222; --play-shadow: 0 2px 5px rgba(0, 0, 0, .45), inset 0 1px 0 #fff;
+  --seek-fill: linear-gradient(#7fb8ff, #2b7de0);
+  --welcome-bg: radial-gradient(ellipse at 50% 30%, #3a3f46, #16181b 70%);
+  --radius-win: 8px; --radius-sm: 6px;
+}
+[data-skin="aluminum"] .time { background: linear-gradient(#cfdcb6, #b5c697); color: #24301a; border: 1px solid #7d8a66; border-radius: 4px; box-shadow: inset 0 1px 3px rgba(0, 0, 0, .35); font-family: "Courier New", monospace; font-weight: 700; padding: 1px 4px; }
+[data-skin="aluminum"] .tb-btn { border-radius: 50%; }
+
+/* ---------- Neumorfismo ---------- */
+[data-skin="neumorphism"] {
+  color-scheme: light;
+  --accent: #6c63ff; --accent-text: #fff;
+  --bg: #e0e5ec; --bg2: #e0e5ec; --panel: #e0e5ec; --panel2: #e0e5ec; --border: transparent; --text: #44506a; --muted: #8a94a8;
+  --hover: rgba(108, 99, 255, .08); --sel: rgba(108, 99, 255, .14); --input: #e0e5ec; --track: rgba(68, 80, 106, .14);
+  --neu: 7px 7px 14px #a3b1c6, -7px -7px 14px #ffffff;
+  --neu-sm: 3px 3px 6px #a3b1c6, -3px -3px 6px #ffffff;
+  --neu-in: inset 3px 3px 6px #a3b1c6, inset -3px -3px 6px #ffffff;
+  --shadow: var(--neu);
+  --wallpaper: #e0e5ec; --bw: 0px;
+  --btn-shadow: var(--neu-sm); --btn-primary-bg: #6c63ff;
+  --play-bg: #e0e5ec; --play-text: #6c63ff; --play-shadow: var(--neu);
+  --seek-fill: linear-gradient(90deg, #8f88ff, #6c63ff);
+  --stage-idle-bg: #e0e5ec; --stage-audio-bg: #e0e5ec;
+  --welcome-bg: #e0e5ec; --welcome-text: #44506a; --welcome-muted: #8a94a8; --welcome-btn-bg: #e0e5ec; --welcome-btn-border: transparent; --welcome-btn-text: #44506a;
+  --art-text: #44506a; --art-muted: #8a94a8;
+  --menu-sel-bg: #6c63ff; --radius-win: 22px; --radius-menu: 16px; --radius-sm: 12px; --gap: 16px;
+}
+[data-skin="neumorphism"] .tb-btn:hover, [data-skin="neumorphism"] .tb-btn.on { background: #e0e5ec; box-shadow: var(--neu-sm); }
+[data-skin="neumorphism"] .tb-btn:active, [data-skin="neumorphism"] .btn:active { box-shadow: var(--neu-in); }
+[data-skin="neumorphism"] .welcome .btn, [data-skin="neumorphism"] .recent-item { box-shadow: var(--neu-sm); }
+[data-skin="neumorphism"] .f-text, [data-skin="neumorphism"] .f-select, [data-skin="neumorphism"] .f-number, [data-skin="neumorphism"] .pl-tools input, [data-skin="neumorphism"] .seek-track, [data-skin="neumorphism"] .file-list, [data-skin="neumorphism"] .log-list { box-shadow: var(--neu-in); border-color: transparent; }
+[data-skin="neumorphism"] .f-group { box-shadow: var(--neu-in); }
+[data-skin="neumorphism"] .win-title { border-bottom: 0; }
+
+/* ---------- Material You ---------- */
+[data-skin="material"] {
+  color-scheme: light;
+  --font: Roboto, "Segoe UI", system-ui, sans-serif;
+  --accent: #6750a4; --accent-text: #fff;
+  --bg: #fdf8fd; --bg2: #f3edf7; --panel: #f7f2fa; --panel2: #ece6f0; --border: #cac4d0; --text: #1d1b20; --muted: #49454f;
+  --hover: rgba(103, 80, 164, .08); --sel: #e8def8; --input: #fffbfe; --track: #e7e0ec;
+  --shadow: 0 4px 10px rgba(0, 0, 0, .12), 0 1px 3px rgba(0, 0, 0, .1);
+  --wallpaper: #fdf8fd; --menubar-bg: #f3edf7; --controls-bg: #f3edf7; --statusbar-bg: #fdf8fd; --pl-bg: #f7f2fa;
+  --win-bg: #f7f2fa; --win-title-bg: #f7f2fa; --menu-bg: #f3edf7; --menu-sel-bg: #e8def8; --menu-sel-text: #1d192b;
+  --btn-bg: #ece6f0; --btn-primary-bg: #6750a4;
+  --play-bg: #eaddff; --play-text: #21005d; --play-shadow: 0 3px 8px rgba(103, 80, 164, .3); --play-radius: 16px;
+  --seek-fill: #6750a4; --seek-height: 6px;
+  --stage-idle-bg: #e8def8; --stage-audio-bg: linear-gradient(160deg, #eaddff, #fdf8fd);
+  --welcome-bg: linear-gradient(160deg, #eaddff 0%, #fdf8fd 60%, #ffd8e4 100%); --welcome-text: #1d1b20; --welcome-muted: #49454f;
+  --welcome-btn-bg: #fff; --welcome-btn-border: #cac4d0; --welcome-btn-text: #21005d;
+  --art-text: #1d1b20; --art-muted: #49454f;
+  --radius-win: 28px; --radius-menu: 16px; --radius-sm: 20px; --gap: 12px;
+}
+[data-skin="material"] .btn { padding-left: 18px; padding-right: 18px; font-weight: 500; }
+[data-skin="material"] .welcome .btn { border-radius: 16px; }
+
+/* ---------- Acrílico (Fluent) ---------- */
+[data-skin="acrylic"] {
+  color-scheme: dark;
+  --font: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --accent: #4cc2ff; --accent-text: #002033;
+  --bg: #101418; --bg2: rgba(32, 32, 36, .72); --panel: rgba(36, 36, 42, .78); --panel2: rgba(255, 255, 255, .05); --border: rgba(255, 255, 255, .09);
+  --text: #f2f2f2; --muted: #b5b5b5; --hover: rgba(255, 255, 255, .07); --sel: rgba(76, 194, 255, .18); --input: rgba(255, 255, 255, .06); --track: rgba(255, 255, 255, .2);
+  --shadow: 0 16px 48px rgba(0, 0, 0, .55);
+  --glass: blur(30px) saturate(150%);
+  --wallpaper: radial-gradient(ellipse at 28% 22%, #2f63e8 0, transparent 48%), radial-gradient(ellipse at 82% 72%, #9b4dff 0, transparent 46%), radial-gradient(ellipse at 60% 110%, #0fb5a4 0, transparent 40%), #0c0f14;
+  --menubar-bg: rgba(28, 28, 32, .7); --controls-bg: rgba(28, 28, 32, .72); --statusbar-bg: rgba(20, 20, 24, .7); --pl-bg: rgba(30, 30, 34, .7); --pl-head-bg: rgba(255, 255, 255, .03);
+  --win-bg: rgba(36, 36, 42, .82); --win-title-bg: transparent; --menu-bg: rgba(40, 40, 46, .86);
+  --menu-sel-bg: rgba(255, 255, 255, .09); --menu-sel-text: #fff;
+  --btn-bg: rgba(255, 255, 255, .07);
+  --play-shadow: 0 2px 10px rgba(76, 194, 255, .35);
+  --stage-idle-bg: rgba(0, 0, 0, .25); --welcome-bg: transparent;
+  --radius-win: 8px; --radius-menu: 8px; --radius-sm: 4px;
+}
+[data-skin="acrylic"] .menu-item:hover, [data-skin="acrylic"] .menu-item:focus { box-shadow: inset 3px 0 0 var(--accent); }
+[data-skin="acrylic"] .tab-btn.active { border-bottom-width: 3px; }
+
+/* ---------- Neobrutalismo ---------- */
+[data-skin="brutalism"] {
+  color-scheme: light;
+  --font: "Space Grotesk", "Arial", sans-serif; --heading-font: "Space Grotesk", "Arial Black", sans-serif;
+  --accent: #ff70a6; --accent-text: #000;
+  --bg: #fff6dc; --bg2: #fff6dc; --panel: #ffffff; --panel2: #ffe8a3; --border: #000; --text: #000; --muted: #333;
+  --hover: #ffd23f; --sel: #70d6ff; --input: #fff; --track: rgba(0, 0, 0, .18);
+  --shadow: 6px 6px 0 #000; --bw: 3px;
+  --wallpaper: radial-gradient(#000 1.2px, transparent 1.4px) 0 0 / 22px 22px, #fff6dc;
+  --menubar-bg: #ffd23f; --menubar-text: #000; --controls-bg: #ffffff; --statusbar-bg: #70d6ff; --pl-bg: #fff; --pl-head-bg: #ffd23f;
+  --win-bg: #fff; --win-title-bg: #ff70a6; --win-title-text: #000; --menu-bg: #fff; --menu-sel-bg: #70d6ff; --menu-sel-text: #000;
+  --btn-bg: #ffd23f; --btn-text: #000; --btn-shadow: 3px 3px 0 #000; --btn-primary-bg: #7cd992; --btn-primary-text: #000;
+  --play-bg: #70d6ff; --play-text: #000; --play-shadow: 3px 3px 0 #000; --play-radius: 6px;
+  --seek-fill: #ff70a6; --seek-height: 8px; --tb-text: #000;
+  --stage-idle-bg: transparent; --stage-audio-bg: #ffe8a3;
+  --welcome-bg: transparent; --welcome-text: #000; --welcome-muted: #222; --welcome-btn-bg: #fff; --welcome-btn-border: #000; --welcome-btn-text: #000;
+  --art-text: #000; --art-muted: #222;
+  --radius-win: 8px; --radius-menu: 6px; --radius-sm: 6px;
+}
+[data-skin="brutalism"] .btn, [data-skin="brutalism"] .welcome .btn { font-weight: 700; transition: transform .08s, box-shadow .08s; box-shadow: 3px 3px 0 #000; }
+[data-skin="brutalism"] .btn:hover, [data-skin="brutalism"] .welcome .btn:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 #000; border-color: #000; }
+[data-skin="brutalism"] .tb-btn.big { border: 3px solid #000; }
+[data-skin="brutalism"] .seek-track { border: 2px solid #000; }
+[data-skin="brutalism"] .welcome h1 { font-size: 44px; text-transform: uppercase; background: #ffd23f; border: 3px solid #000; padding: 2px 14px; box-shadow: 6px 6px 0 #000; }
+
+/* ---------- Terminal (fósforo verde) ---------- */
+[data-skin="terminal"] {
+  color-scheme: dark;
+  --font: VT323, "Courier New", Consolas, monospace; --heading-font: VT323, monospace; --font-size: 18px;
+  --accent: #39ff6a; --accent-text: #000;
+  --bg: #000; --bg2: #000; --panel: #010a03; --panel2: #031a08; --border: #1f7a33; --text: #39ff6a; --muted: #25a548;
+  --hover: rgba(57, 255, 106, .12); --sel: rgba(57, 255, 106, .22); --input: #000; --track: rgba(57, 255, 106, .25);
+  --shadow: 0 0 0 1px #1f7a33, 0 0 22px rgba(57, 255, 106, .18);
+  --wallpaper: radial-gradient(ellipse at center, #031a08 0%, #000 75%);
+  --win-title-bg: #39ff6a; --win-title-text: #000; --menu-sel-bg: #39ff6a; --menu-sel-text: #000;
+  --play-bg: #000; --play-text: #39ff6a; --play-shadow: 0 0 0 2px #39ff6a, 0 0 12px rgba(57, 255, 106, .6); --play-radius: 0;
+  --welcome-bg: radial-gradient(ellipse at center, #032010, #000 70%); --welcome-text: #39ff6a; --welcome-muted: #25a548;
+  --welcome-btn-bg: #000; --welcome-btn-border: #39ff6a; --welcome-btn-text: #39ff6a;
+  --art-text: #39ff6a; --art-muted: #25a548;
+  --text-shadow: 0 0 6px rgba(57, 255, 106, .65);
+  --radius-win: 0px; --radius-menu: 0px; --radius-sm: 0px;
+  --fx1: repeating-linear-gradient(0deg, rgba(0, 0, 0, .32) 0 1px, transparent 1px 3px);
+  --fx2: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .55) 100%);
+}
+[data-skin="terminal"] #skin-fx { z-index: 9990; }
+[data-skin="terminal"] #skin-fx::before { opacity: .55; }
+[data-skin="terminal"] .menubar, [data-skin="terminal"] .controls, [data-skin="terminal"] .statusbar, [data-skin="terminal"] .playlist-panel, [data-skin="terminal"] .win, [data-skin="terminal"] .menu { text-shadow: 0 0 5px rgba(57, 255, 106, .55); }
+[data-skin="terminal"] .menubar-item, [data-skin="terminal"] .menu, [data-skin="terminal"] .btn, [data-skin="terminal"] .win, [data-skin="terminal"] .pl-list, [data-skin="terminal"] .pl-tab,
+[data-skin="terminal"] .statusbar, [data-skin="terminal"] .time, [data-skin="terminal"] .f-text, [data-skin="terminal"] .f-select, [data-skin="terminal"] .tab-btn, [data-skin="terminal"] .vol-pct, [data-skin="terminal"] .recent-item { font-size: 17px; }
+[data-skin="terminal"] .menubar-item { text-transform: uppercase; }
+[data-skin="terminal"] .welcome h1::after { content: "_"; animation: blink 1s steps(1) infinite; }
+
+/* ---------- 8-bit (pixel art) ---------- */
+[data-skin="pixel"] {
+  color-scheme: dark;
+  --font: "Press Start 2P", "Courier New", monospace; --heading-font: "Press Start 2P", monospace; --font-size: 10px;
+  --accent: #ffcc00; --accent-text: #000;
+  --bg: #1b1b3a; --bg2: #24244d; --panel: #2b2b5c; --panel2: #36367a; --border: #f8f8f8; --text: #ffffff; --muted: #b8b8e0;
+  --hover: rgba(255, 204, 0, .2); --sel: rgba(0, 200, 255, .3); --input: #12122a; --track: #46468c;
+  --shadow: 6px 6px 0 #000; --bw: 4px;
+  --wallpaper: linear-gradient(45deg, #1b1b3a 25%, transparent 25%, transparent 75%, #1b1b3a 75%) 0 0 / 32px 32px, linear-gradient(45deg, #1b1b3a 25%, #212150 25%, #212150 75%, #1b1b3a 75%) 16px 16px / 32px 32px;
+  --menubar-bg: #000; --controls-bg: #24244d; --statusbar-bg: #000;
+  --win-title-bg: #e83b3b; --win-title-text: #fff; --menu-sel-bg: #ffcc00; --menu-sel-text: #000;
+  --btn-bg: #36367a; --btn-shadow: inset -4px -4px 0 rgba(0, 0, 0, .35); --btn-primary-bg: #3ccf4e; --btn-primary-text: #000;
+  --play-bg: #ffcc00; --play-text: #000; --play-shadow: inset -4px -4px 0 #c79400, 4px 4px 0 #000; --play-radius: 0;
+  --seek-fill: repeating-linear-gradient(90deg, #ffcc00 0 8px, #ff8a00 8px 10px); --seek-height: 8px;
+  --stage-idle-bg: transparent; --welcome-bg: transparent;
+  --welcome-btn-bg: #36367a; --welcome-btn-border: #fff;
+  --radius-win: 0px; --radius-menu: 0px; --radius-sm: 0px;
+}
+[data-skin="pixel"] .menubar-item, [data-skin="pixel"] .menu, [data-skin="pixel"] .btn, [data-skin="pixel"] .win, [data-skin="pixel"] .pl-list, [data-skin="pixel"] .pl-tab,
+[data-skin="pixel"] .statusbar, [data-skin="pixel"] .time, [data-skin="pixel"] .f-text, [data-skin="pixel"] .f-select, [data-skin="pixel"] .tab-btn, [data-skin="pixel"] .vol-pct,
+[data-skin="pixel"] .recent-item, [data-skin="pixel"] .welcome p, [data-skin="pixel"] .menu-shortcut, [data-skin="pixel"] .f-hint, [data-skin="pixel"] .pl-count { font-size: 10px; line-height: 1.7; }
+[data-skin="pixel"] .welcome h1 { font-size: 22px; color: #ffcc00; text-shadow: 4px 4px 0 #e83b3b; }
+[data-skin="pixel"] .seek-track { border-radius: 0; }
+
+/* ---------- Cottagecore ---------- */
+[data-skin="cottagecore"] {
+  color-scheme: light;
+  --font: Lora, Georgia, "Times New Roman", serif; --heading-font: Lora, Georgia, serif;
+  --accent: #6f8f5b; --accent-text: #fff;
+  --bg: #f6efe2; --bg2: #efe4cf; --panel: #fffaf0; --panel2: #f1e6d2; --border: #d8c7a6; --text: #4e3b2c; --muted: #8a7660;
+  --hover: rgba(111, 143, 91, .12); --sel: rgba(214, 140, 120, .22); --input: #fffdf8; --track: rgba(78, 59, 44, .16);
+  --shadow: 0 10px 26px rgba(110, 80, 50, .22);
+  --wallpaper: radial-gradient(circle at 10px 10px, #e8a5a0 0 3px, transparent 3.5px) 0 0 / 56px 56px, radial-gradient(circle at 38px 36px, #b6c99a 0 2.5px, transparent 3px) 0 0 / 56px 56px, radial-gradient(circle at 30px 12px, #f2d27e 0 2px, transparent 2.5px) 0 0 / 56px 56px, #f6efe2;
+  --menubar-bg: #efe4cf; --controls-bg: #efe4cf; --statusbar-bg: #e8dcc4; --pl-bg: #fffaf0;
+  --win-title-bg: linear-gradient(#f7eedb, #ecdfc4); --menu-sel-bg: #8aa77c; --menu-sel-text: #fff;
+  --btn-bg: #fffaf0; --btn-primary-bg: #6f8f5b;
+  --play-bg: radial-gradient(circle at 40% 35%, #a9c493, #6f8f5b); --play-shadow: 0 3px 8px rgba(80, 100, 60, .35);
+  --seek-fill: linear-gradient(90deg, #e8a5a0, #d68c78);
+  --stage-idle-bg: transparent; --stage-audio-bg: rgba(255, 250, 240, .4);
+  --welcome-bg: transparent; --welcome-text: #4e3b2c; --welcome-muted: #7a654f; --welcome-btn-bg: #fffaf0; --welcome-btn-border: #d8c7a6; --welcome-btn-text: #4e3b2c;
+  --art-text: #4e3b2c; --art-muted: #7a654f;
+  --radius-win: 16px; --radius-sm: 10px;
+}
+[data-skin="cottagecore"] .f-group { border-style: dashed; }
+[data-skin="cottagecore"] .win-title-text::before { content: "❀ "; color: #d68c78; }
+[data-skin="cottagecore"] .welcome h1 { font-style: italic; }
+
+/* ---------- Lo-fi café ---------- */
+[data-skin="cafe"] {
+  color-scheme: dark;
+  --font: Nunito, "Segoe UI", sans-serif;
+  --accent: #e7a35a; --accent-text: #241914;
+  --bg: #241914; --bg2: #2e211a; --panel: #33251d; --panel2: #3d2c22; --border: #5a4334; --text: #f3e4d4; --muted: #bfa48c;
+  --hover: rgba(231, 163, 90, .1); --sel: rgba(231, 163, 90, .22); --input: #2a1d17; --track: rgba(243, 228, 212, .18);
+  --shadow: 0 14px 34px rgba(0, 0, 0, .5);
+  --wallpaper: radial-gradient(ellipse at 75% 20%, rgba(255, 190, 110, .28), transparent 45%), linear-gradient(160deg, #3a2418, #1a110d);
+  --menubar-bg: rgba(46, 33, 26, .92); --controls-bg: rgba(46, 33, 26, .92); --statusbar-bg: rgba(30, 21, 16, .9);
+  --play-shadow: 0 3px 14px rgba(231, 163, 90, .45);
+  --seek-fill: linear-gradient(90deg, #c47a3c, #e7a35a);
+  --stage-idle-bg: transparent; --stage-audio-bg: rgba(20, 13, 10, .45);
+  --welcome-bg: transparent; --welcome-text: #f8e9d8; --welcome-muted: #d2b79c; --welcome-btn-bg: rgba(51, 37, 29, .82); --welcome-btn-border: #6a5040; --welcome-btn-text: #f3e4d4;
+  --radius-win: 16px; --radius-sm: 10px;
+  --fx1: repeating-linear-gradient(104deg, transparent 0 26px, rgba(200, 215, 255, .12) 26px 27px, transparent 27px 59px);
+}
+[data-skin="cafe"] #skin-fx::before { bottom: auto; height: 200%; animation: fx-fall 3.5s linear infinite; }
+
+/* ---------- Oceano profundo ---------- */
+[data-skin="ocean"] {
+  color-scheme: dark;
+  --accent: #2ee6d6; --accent-text: #00222a;
+  --bg: #021526; --bg2: rgba(3, 40, 66, .7); --panel: rgba(4, 44, 74, .82); --panel2: rgba(255, 255, 255, .06); --border: rgba(46, 230, 214, .25);
+  --text: #e3fbff; --muted: #8fc3d1; --hover: rgba(46, 230, 214, .1); --sel: rgba(46, 230, 214, .2); --input: rgba(0, 20, 36, .7); --track: rgba(227, 251, 255, .2);
+  --shadow: 0 16px 40px rgba(0, 10, 25, .6);
+  --glass: blur(16px) saturate(140%);
+  --wallpaper: conic-gradient(from 160deg at 50% -10%, transparent 0 8deg, rgba(160, 240, 255, .1) 10deg 14deg, transparent 16deg 22deg, rgba(160, 240, 255, .08) 24deg 27deg, transparent 29deg), linear-gradient(180deg, #0d6a93 0%, #064066 35%, #021a33 75%, #010b18 100%);
+  --menubar-bg: rgba(2, 30, 52, .6); --controls-bg: rgba(2, 30, 52, .62); --statusbar-bg: rgba(1, 15, 30, .6); --pl-bg: rgba(2, 30, 52, .55); --pl-head-bg: rgba(255, 255, 255, .04);
+  --win-bg: rgba(3, 36, 60, .82); --win-title-bg: rgba(255, 255, 255, .05); --menu-bg: rgba(3, 36, 60, .9);
+  --play-bg: radial-gradient(circle at 40% 30%, #9ffff5, #2ee6d6 45%, #0a8fa3); --play-shadow: 0 0 18px rgba(46, 230, 214, .5);
+  --seek-fill: linear-gradient(90deg, #0a8fa3, #2ee6d6);
+  --stage-bg: rgba(0, 6, 14, .85); --stage-idle-bg: transparent; --stage-audio-bg: rgba(0, 10, 20, .25);
+  --welcome-bg: transparent; --welcome-btn-bg: rgba(3, 40, 66, .6); --welcome-btn-border: rgba(46, 230, 214, .35);
+  --radius-win: 16px; --radius-sm: 10px;
+  --fx1: radial-gradient(circle at 30% 30%, rgba(220, 250, 255, .7) 0 2px, rgba(160, 230, 255, .14) 3px 12px, rgba(200, 245, 255, .45) 13px 14px, transparent 15px), radial-gradient(circle at 30% 30%, rgba(220, 250, 255, .7) 0 1px, rgba(160, 230, 255, .12) 2px 6px, rgba(200, 245, 255, .45) 7px 8px, transparent 9px);
+  --fx1-size: 21vw 25%, 13vw 12.5%;
+  --fx1-pos: 5vw 0, 9vw 0;
+}
+[data-skin="ocean"] #skin-fx::before { bottom: auto; height: 200%; animation: fx-rise 45s linear infinite; }
+
+/* ---------- Floresta ---------- */
+[data-skin="forest"] {
+  color-scheme: dark;
+  --accent: #8bd16e; --accent-text: #0d1b14;
+  --bg: #0d1b14; --bg2: #13261c; --panel: #172e22; --panel2: #1d3a2a; --border: #2f5240; --text: #e4f1e0; --muted: #98b9a1;
+  --hover: rgba(139, 209, 110, .1); --sel: rgba(139, 209, 110, .2); --input: #0f2118; --track: rgba(228, 241, 224, .18);
+  --shadow: 0 14px 34px rgba(0, 0, 0, .55);
+  --wallpaper: radial-gradient(ellipse 70% 40% at 50% 115%, #1f4a2e, transparent 70%), linear-gradient(180deg, #0a1a12, #0d2418 60%, #061009);
+  --play-shadow: 0 2px 12px rgba(139, 209, 110, .4);
+  --seek-fill: linear-gradient(90deg, #4f9a46, #8bd16e);
+  --stage-idle-bg: transparent;
+  --welcome-bg: transparent; --welcome-btn-bg: rgba(23, 46, 34, .8); --welcome-btn-border: #2f5240;
+  --fx1: radial-gradient(circle, rgba(220, 255, 140, .95) 0 1.5px, rgba(200, 255, 100, .35) 2px 5px, transparent 7px);
+  --fx1-size: 13vw 12.5%;
+  --fx1-pos: 3vw 0;
+  --fx2: radial-gradient(circle, rgba(240, 255, 170, .9) 0 1.5px, rgba(200, 255, 100, .3) 2px 6px, transparent 8px);
+  --fx2-size: 19vw 210px;
+  --fx2-pos: 9vw 70px;
+}
+[data-skin="forest"] #skin-fx::before { bottom: auto; height: 200%; animation: fx-rise 90s linear infinite; }
+[data-skin="forest"] #skin-fx::after { animation: fx-twinkle 3.2s ease-in-out infinite; }
+
+/* ---------- Pôr do sol ---------- */
+[data-skin="sunset"] {
+  color-scheme: dark;
+  --accent: #ffcf6b; --accent-text: #3a1030;
+  --bg: #2b1055; --bg2: rgba(40, 12, 50, .5); --panel: rgba(50, 16, 60, .62); --panel2: rgba(255, 255, 255, .08); --border: rgba(255, 220, 200, .28);
+  --text: #fff6ee; --muted: #f0c9c2; --hover: rgba(255, 255, 255, .1); --sel: rgba(255, 207, 107, .25); --input: rgba(30, 8, 40, .5); --track: rgba(255, 246, 238, .25);
+  --shadow: 0 16px 40px rgba(40, 0, 40, .45);
+  --glass: blur(18px) saturate(140%);
+  --wallpaper: radial-gradient(circle at 50% 78%, rgba(255, 236, 160, .95) 0 7%, rgba(255, 180, 110, .5) 14%, transparent 34%), linear-gradient(180deg, #2b1055 0%, #7b2ff7 26%, #f9446e 56%, #ffb36b 80%, #ffe29a 100%);
+  --menubar-bg: rgba(40, 10, 50, .4); --controls-bg: rgba(40, 10, 50, .45); --statusbar-bg: rgba(30, 6, 40, .4); --pl-bg: rgba(40, 10, 50, .4); --pl-head-bg: rgba(255, 255, 255, .05);
+  --win-bg: rgba(50, 16, 60, .72); --win-title-bg: rgba(255, 255, 255, .07); --menu-bg: rgba(50, 16, 60, .82);
+  --play-bg: linear-gradient(135deg, #ffe29a, #ff8a5b); --play-shadow: 0 0 18px rgba(255, 180, 110, .6);
+  --seek-fill: linear-gradient(90deg, #f9446e, #ffcf6b);
+  --stage-bg: rgba(20, 0, 25, .82); --stage-idle-bg: transparent; --stage-audio-bg: rgba(40, 0, 40, .25);
+  --welcome-bg: transparent; --welcome-btn-bg: rgba(50, 16, 60, .5); --welcome-btn-border: rgba(255, 220, 200, .4);
+  --welcome-muted: #fff4ea; --text-shadow: 0 1px 4px rgba(60, 0, 60, .75);
+  --radius-win: 18px; --radius-sm: 10px;
+}
+
+/* ---------- Sakura ---------- */
+[data-skin="sakura"] {
+  color-scheme: light;
+  --font: Nunito, "Segoe UI", sans-serif;
+  --accent: #e2557f; --accent-text: #fff;
+  --bg: #fff0f5; --bg2: #ffe7ef; --panel: #fffafc; --panel2: #ffe4ee; --border: #f6c6d8; --text: #5a2a3d; --muted: #a0657c;
+  --hover: rgba(226, 85, 127, .08); --sel: rgba(226, 85, 127, .16); --input: #fff; --track: rgba(90, 42, 61, .14);
+  --shadow: 0 12px 30px rgba(200, 100, 140, .2);
+  --wallpaper: radial-gradient(ellipse at 85% 10%, #ffd6e5, transparent 40%), linear-gradient(180deg, #fff5f9, #ffe3ee);
+  --menubar-bg: rgba(255, 240, 246, .9); --controls-bg: rgba(255, 240, 246, .92); --statusbar-bg: #ffe7ef;
+  --win-title-bg: linear-gradient(90deg, #ffe0ec, #fff3f8); --menu-sel-bg: #f48fb1; --menu-sel-text: #fff;
+  --btn-bg: #fff; --play-bg: radial-gradient(circle at 40% 35%, #ff9fbe, #e2557f); --play-shadow: 0 3px 12px rgba(226, 85, 127, .4);
+  --seek-fill: linear-gradient(90deg, #ffb3cc, #e2557f);
+  --stage-idle-bg: transparent; --stage-audio-bg: rgba(255, 255, 255, .35);
+  --welcome-bg: transparent; --welcome-text: #6b2f47; --welcome-muted: #a0657c; --welcome-btn-bg: #fff; --welcome-btn-border: #f6c6d8; --welcome-btn-text: #5a2a3d;
+  --art-text: #5a2a3d; --art-muted: #a0657c;
+  --radius-win: 18px; --radius-sm: 12px;
+  --fx1: radial-gradient(ellipse 7px 4px at 50% 50%, #ffb7cf 60%, transparent 70%), radial-gradient(ellipse 5px 3px at 50% 50%, #ff9fbe 60%, transparent 70%), radial-gradient(ellipse 6px 4px at 50% 50%, #ffd0de 60%, transparent 70%);
+  --fx1-size: 17vw 12.5%, 23vw 25%, 29vw 25%;
+  --fx1-pos: 2vw 3vh, 12vw 20vh, 20vw 9vh;
+}
+[data-skin="sakura"] #skin-fx::before { top: auto; bottom: 0; height: 200%; right: -10%; animation: fx-fall 38s linear infinite; }
+
+/* ---------- Galáxia ---------- */
+[data-skin="galaxy"] {
+  color-scheme: dark;
+  --accent: #a78bfa; --accent-text: #0b0620;
+  --bg: #05030f; --bg2: rgba(15, 10, 35, .55); --panel: rgba(18, 12, 42, .72); --panel2: rgba(255, 255, 255, .06); --border: rgba(167, 139, 250, .25);
+  --text: #ece8ff; --muted: #a9a2cf; --hover: rgba(167, 139, 250, .12); --sel: rgba(167, 139, 250, .24); --input: rgba(5, 3, 15, .6); --track: rgba(236, 232, 255, .2);
+  --shadow: 0 16px 44px rgba(0, 0, 0, .6);
+  --glass: blur(16px) saturate(140%);
+  --wallpaper: radial-gradient(ellipse at 20% 30%, rgba(124, 58, 237, .45), transparent 45%), radial-gradient(ellipse at 80% 20%, rgba(37, 99, 235, .35), transparent 40%), radial-gradient(ellipse at 65% 85%, rgba(219, 39, 119, .35), transparent 45%), #05030f;
+  --menubar-bg: rgba(10, 6, 25, .55); --controls-bg: rgba(10, 6, 25, .6); --statusbar-bg: rgba(5, 3, 15, .6); --pl-bg: rgba(10, 6, 25, .55); --pl-head-bg: rgba(255, 255, 255, .04);
+  --win-bg: rgba(18, 12, 42, .82); --win-title-bg: rgba(255, 255, 255, .05); --menu-bg: rgba(18, 12, 42, .9);
+  --play-bg: radial-gradient(circle at 40% 30%, #ddd6fe, #a78bfa 45%, #6d28d9); --play-shadow: 0 0 20px rgba(167, 139, 250, .6);
+  --seek-fill: linear-gradient(90deg, #6d28d9, #db2777, #a78bfa);
+  --stage-bg: rgba(0, 0, 6, .85); --stage-idle-bg: transparent; --stage-audio-bg: rgba(5, 3, 15, .25);
+  --welcome-bg: transparent; --welcome-btn-bg: rgba(18, 12, 42, .6); --welcome-btn-border: rgba(167, 139, 250, .35);
+  --radius-win: 16px; --radius-sm: 10px;
+  --fx1: radial-gradient(circle, #fff 0 1px, transparent 1.5px), radial-gradient(circle, rgba(200, 210, 255, .9) 0 1px, transparent 1.5px);
+  --fx1-size: 110px 90px, 170px 150px;
+  --fx1-pos: 10px 20px, 60px 80px;
+  --fx2: radial-gradient(circle, #fff 0 1.4px, transparent 2px), radial-gradient(circle, #ffe9b0 0 1.2px, transparent 1.8px);
+  --fx2-size: 230px 200px, 310px 260px;
+  --fx2-pos: 40px 60px, 150px 20px;
+}
+[data-skin="galaxy"] #skin-fx::after { animation: fx-twinkle 3s ease-in-out infinite; }
+
+/* ---------- Nórdico (Nord) ---------- */
+[data-skin="nord"] {
+  color-scheme: dark;
+  --accent: #88c0d0; --accent-text: #2e3440;
+  --bg: #2e3440; --bg2: #3b4252; --panel: #3b4252; --panel2: #434c5e; --border: #4c566a; --text: #eceff4; --muted: #a9b3c4;
+  --hover: rgba(216, 222, 233, .08); --sel: rgba(136, 192, 208, .22); --input: #2e3440; --track: rgba(216, 222, 233, .2);
+  --shadow: 0 12px 30px rgba(0, 0, 0, .35);
+  --menu-sel-bg: #5e81ac; --menu-sel-text: #eceff4;
+  --play-shadow: 0 2px 10px rgba(136, 192, 208, .35);
+  --seek-fill: linear-gradient(90deg, #5e81ac, #88c0d0);
+  --welcome-bg: radial-gradient(ellipse at 50% 35%, #434c5e, #2e3440 70%); --welcome-text: #eceff4; --welcome-muted: #d8dee9;
+  --stage-audio-bg: radial-gradient(circle at 50% 30%, #434c5e, #2e3440 70%);
+}
+
+/* ---------- Drácula ---------- */
+[data-skin="dracula"] {
+  color-scheme: dark;
+  --accent: #bd93f9; --accent-text: #282a36;
+  --bg: #282a36; --bg2: #21222c; --panel: #2f3142; --panel2: #44475a; --border: #44475a; --text: #f8f8f2; --muted: #a4abd0;
+  --hover: rgba(248, 248, 242, .07); --sel: rgba(189, 147, 249, .22); --input: #21222c; --track: rgba(248, 248, 242, .18);
+  --shadow: 0 12px 30px rgba(0, 0, 0, .45);
+  --menu-sel-bg: #44475a; --menu-sel-text: #50fa7b;
+  --btn-primary-bg: #bd93f9;
+  --play-bg: #ff79c6; --play-text: #282a36; --play-shadow: 0 2px 12px rgba(255, 121, 198, .45);
+  --seek-fill: linear-gradient(90deg, #ff79c6, #bd93f9);
+  --welcome-bg: radial-gradient(ellipse at 50% 35%, #3a3c4e, #1e1f29 70%); --welcome-muted: #a4abd0;
+  --stage-audio-bg: radial-gradient(circle at 50% 30%, #3a3c4e, #1e1f29 70%);
+}
+
+/* ---------- Solarizado claro ---------- */
+[data-skin="solarized"] {
+  color-scheme: light;
+  --accent: #268bd2; --accent-text: #fdf6e3;
+  --bg: #fdf6e3; --bg2: #eee8d5; --panel: #fdf6e3; --panel2: #eee8d5; --border: #d9cfb3; --text: #586e75; --muted: #93a1a1;
+  --hover: rgba(88, 110, 117, .08); --sel: rgba(38, 139, 210, .15); --input: #fffbef; --track: rgba(88, 110, 117, .18);
+  --shadow: 0 10px 26px rgba(101, 123, 131, .2);
+  --menu-sel-bg: #268bd2; --play-bg: #cb4b16; --play-text: #fdf6e3; --play-shadow: 0 2px 8px rgba(203, 75, 22, .35);
+  --seek-fill: linear-gradient(90deg, #2aa198, #268bd2);
+  --stage-audio-bg: radial-gradient(circle at 50% 30%, #fdf6e3, #eee8d5 75%);
+  --welcome-bg: radial-gradient(ellipse at 50% 35%, #fdf6e3, #eee8d5 70%); --welcome-text: #073642; --welcome-muted: #657b83;
+  --welcome-btn-bg: #fdf6e3; --welcome-btn-border: #d9cfb3; --welcome-btn-text: #586e75;
+  --art-text: #073642; --art-muted: #657b83;
+}
+
+/* ---------- Alto contraste ---------- */
+[data-skin="contrast"] {
+  color-scheme: dark;
+  --accent: #ffff00; --accent-text: #000;
+  --bg: #000; --bg2: #000; --panel: #000; --panel2: #111; --border: #fff; --text: #fff; --muted: #e6e6e6;
+  --hover: #333; --sel: #0000c8; --input: #000; --track: #777; --shadow: none; --bw: 2px;
+  --menu-sel-bg: #ffff00; --menu-sel-text: #000; --btn-bg: #000; --play-shadow: none;
+  --welcome-bg: #000; --welcome-text: #fff; --welcome-muted: #fff; --welcome-btn-bg: #000; --welcome-btn-border: #fff; --welcome-btn-text: #fff;
+  --stage-audio-bg: #000;
+}
+[data-skin="contrast"] :focus-visible { outline: 3px solid #ffff00; outline-offset: 2px; }
+[data-skin="contrast"] .link, [data-skin="contrast"] a { text-decoration: underline; color: #00ffff; }
+[data-skin="contrast"] .tb-btn:hover, [data-skin="contrast"] .menubar-item:hover { outline: 2px solid #fff; }
+[data-skin="contrast"] .pl-row.current, [data-skin="contrast"] .tb-btn.on { color: #ffff00; text-decoration: underline; }
+
+/* ---------- AMOLED ---------- */
+[data-skin="amoled"] {
+  color-scheme: dark;
+  --accent: #ff8800; --accent-text: #000;
+  --bg: #000; --bg2: #000; --panel: #0a0a0a; --panel2: #121212; --border: #222; --text: #f2f2f2; --muted: #8a8a8a;
+  --hover: rgba(255, 255, 255, .08); --sel: rgba(255, 136, 0, .2); --input: #000; --track: rgba(255, 255, 255, .18);
+  --shadow: 0 0 0 1px #222;
+  --controls-bg: rgba(0, 0, 0, .82);
+  --welcome-bg: #000; --stage-audio-bg: #000;
+  --glass: blur(10px);
+}
+
+/* ---------- Retrô 95 (Web 1.0) ---------- */
+[data-skin="web1"] {
+  color-scheme: light;
+  --font: "MS Sans Serif", "Microsoft Sans Serif", Tahoma, Geneva, Arial, sans-serif; --heading-font: "Times New Roman", Times, serif; --font-size: 13px;
+  --accent: #000080; --accent-text: #fff;
+  --bg: #c0c0c0; --bg2: #c0c0c0; --panel: #c0c0c0; --panel2: #c0c0c0; --border: #808080; --text: #000; --muted: #404040;
+  --hover: rgba(0, 0, 128, .12); --sel: #000080; --input: #fff; --track: #808080;
+  --bevel: inset -1px -1px #0a0a0a, inset 1px 1px #ffffff, inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+  --bevel-in: inset -1px -1px #ffffff, inset 1px 1px #0a0a0a, inset -2px -2px #dfdfdf, inset 2px 2px #808080;
+  --shadow: var(--bevel), 2px 2px 0 rgba(0, 0, 0, .4);
+  --wallpaper: #008080;
+  --menubar-bg: #c0c0c0; --controls-bg: #c0c0c0; --statusbar-bg: #c0c0c0; --pl-bg: #c0c0c0; --pl-head-bg: #c0c0c0;
+  --win-bg: #c0c0c0; --win-title-bg: linear-gradient(90deg, #000080, #1084d0); --win-title-text: #fff;
+  --menu-bg: #c0c0c0; --menu-sel-bg: #000080; --menu-sel-text: #fff;
+  --btn-bg: #c0c0c0; --btn-shadow: var(--bevel); --btn-primary-bg: #c0c0c0; --btn-primary-text: #000;
+  --play-bg: #c0c0c0; --play-text: #000; --play-shadow: var(--bevel); --play-radius: 0;
+  --seek-fill: repeating-linear-gradient(90deg, #000080 0 10px, transparent 10px 12px); --seek-height: 10px;
+  --stage-idle-bg: #008080; --stage-audio-bg: #008080;
+  --welcome-bg: #008080; --welcome-text: #fff; --welcome-muted: #e0ffff; --welcome-btn-bg: #c0c0c0; --welcome-btn-border: transparent; --welcome-btn-text: #000;
+  --radius-win: 0px; --radius-menu: 0px; --radius-sm: 0px; --bw: 0px;
+}
+[data-skin="web1"] .btn, [data-skin="web1"] .welcome .btn, [data-skin="web1"] .tb-btn:hover, [data-skin="web1"] .recent-item { box-shadow: var(--bevel); }
+[data-skin="web1"] .btn:active, [data-skin="web1"] .tb-btn:active, [data-skin="web1"] .tb-btn.on { box-shadow: var(--bevel-in); }
+[data-skin="web1"] .f-text, [data-skin="web1"] .f-select, [data-skin="web1"] .f-number, [data-skin="web1"] .pl-tools input, [data-skin="web1"] .file-list, [data-skin="web1"] .log-list, [data-skin="web1"] .pl-list, [data-skin="web1"] .seek-track, [data-skin="web1"] .stage { box-shadow: var(--bevel-in); }
+[data-skin="web1"] .win, [data-skin="web1"] .menu, [data-skin="web1"] .controls, [data-skin="web1"] .menubar { box-shadow: var(--bevel); }
+[data-skin="web1"] .win-title { font-weight: 700; }
+[data-skin="web1"] .welcome h1 { font-size: 40px; color: #ffff00; text-shadow: 2px 2px 0 #000; font-style: italic; }
+[data-skin="web1"] .welcome kbd { color: #000; }
+[data-skin="web1"] .pl-row.selected, [data-skin="web1"] .pl-tab.active, [data-skin="web1"] .prefs-nav button.active, [data-skin="web1"] .bm-row.selected, [data-skin="web1"] .skin-card.active .skin-card-name { color: #fff; }
+[data-skin="web1"] .skin-card.active { background: #000080; }
+[data-skin="web1"] .skin-card.active .skin-card-desc, [data-skin="web1"] .skin-card.active .skin-card-tags span { color: #dfe6ff; }
+
+/* ---------- Liminal (Backrooms) ---------- */
+[data-skin="liminal"] {
+  color-scheme: light;
+  --font: Arial, Helvetica, sans-serif;
+  --accent: #57502a; --accent-text: #f0e7b0;
+  --bg: #cdbd73; --bg2: #d8c87a; --panel: #e4d68e; --panel2: #d6c67a; --border: #9c8a45; --text: #3b3216; --muted: #6f6334;
+  --hover: rgba(59, 50, 22, .08); --sel: rgba(87, 80, 42, .18); --input: #efe3a4; --track: rgba(59, 50, 22, .2);
+  --shadow: 0 8px 22px rgba(80, 70, 20, .3);
+  --wallpaper: repeating-linear-gradient(45deg, rgba(120, 100, 40, .06) 0 2px, transparent 2px 6px), repeating-linear-gradient(-45deg, rgba(255, 250, 200, .08) 0 2px, transparent 2px 7px), linear-gradient(#d9ca82, #bfae63);
+  --menubar-bg: #e8dc9a; --controls-bg: #ddd08a; --statusbar-bg: #cfc07a;
+  --play-shadow: 0 2px 8px rgba(60, 50, 10, .35);
+  --seek-fill: #57502a;
+  --stage-idle-bg: transparent; --stage-audio-bg: rgba(255, 250, 210, .15);
+  --welcome-bg: linear-gradient(rgba(255, 252, 225, .55), transparent 18%); --welcome-text: #3b3216; --welcome-muted: #5f5428;
+  --welcome-btn-bg: #efe3a4; --welcome-btn-border: #9c8a45; --welcome-btn-text: #3b3216;
+  --art-text: #3b3216; --art-muted: #5f5428;
+  --radius-win: 2px; --radius-menu: 2px; --radius-sm: 2px;
+  --fx2: linear-gradient(rgba(255, 255, 235, .22), rgba(255, 255, 235, .22));
+}
+[data-skin="liminal"] #skin-fx::after { animation: fx-flicker 9s steps(1) infinite; }
+[data-skin="liminal"] .welcome h1 { letter-spacing: .08em; font-weight: 400; opacity: .85; }
+
+/* ---------- Steampunk ---------- */
+[data-skin="steampunk"] {
+  color-scheme: dark;
+  --font: Georgia, "Times New Roman", serif; --heading-font: Cinzel, Georgia, serif;
+  --accent: #d4a24c; --accent-text: #2a1d14;
+  --bg: #2a1d14; --bg2: #3a2718; --panel: #3d2a1b; --panel2: #4a331f; --border: #b08d57; --text: #f1e3c6; --muted: #c7ab7f;
+  --hover: rgba(212, 162, 76, .12); --sel: rgba(212, 162, 76, .24); --input: #2a1d14; --track: rgba(241, 227, 198, .2);
+  --shadow: 0 14px 34px rgba(0, 0, 0, .6), inset 0 0 0 1px rgba(255, 220, 160, .08);
+  --wallpaper: radial-gradient(circle at 50% 40%, #4a3020, #1a110b 75%);
+  --menubar-bg: linear-gradient(#5a3e26, #3a2718); --controls-bg: linear-gradient(#4a331f, #2e2015); --statusbar-bg: #22170f;
+  --win-title-bg: linear-gradient(#e8c27a, #a87b35); --win-title-text: #2a1d14;
+  --menu-sel-bg: linear-gradient(#e8c27a, #a87b35); --menu-sel-text: #2a1d14;
+  --btn-bg: linear-gradient(#5a3e26, #3d2a1b); --btn-shadow: inset 0 1px 0 rgba(255, 220, 160, .25);
+  --btn-primary-bg: linear-gradient(#e8c27a, #a87b35); --btn-primary-text: #2a1d14;
+  --play-bg: radial-gradient(circle at 40% 35%, #f3d699, #c4913f 50%, #7a5420); --play-text: #2a1d14; --play-shadow: 0 0 0 3px #7a5420, 0 3px 10px rgba(0, 0, 0, .6);
+  --seek-fill: linear-gradient(#e8c27a, #a87b35);
+  --welcome-bg: radial-gradient(circle at 50% 40%, #4a3020, #1a110b 75%); --welcome-text: #f1e3c6; --welcome-muted: #c7ab7f;
+  --welcome-btn-bg: linear-gradient(#5a3e26, #3d2a1b); --welcome-btn-border: #b08d57; --welcome-btn-text: #f1e3c6;
+  --radius-win: 10px; --radius-sm: 6px; --bw: 2px;
+}
+[data-skin="steampunk"] .win { background-image: radial-gradient(circle at 10px 10px, #c4913f 0 3px, #7a5420 3.5px, transparent 4.5px), radial-gradient(circle at calc(100% - 10px) 10px, #c4913f 0 3px, #7a5420 3.5px, transparent 4.5px), radial-gradient(circle at 10px calc(100% - 10px), #c4913f 0 3px, #7a5420 3.5px, transparent 4.5px), radial-gradient(circle at calc(100% - 10px) calc(100% - 10px), #c4913f 0 3px, #7a5420 3.5px, transparent 4.5px); }
+[data-skin="steampunk"] .welcome h1 { letter-spacing: .14em; color: #e8c27a; }
+
+/* =====================================================================
+ * Galeria de temas — miniaturas e cartões
+ * ===================================================================== */
+.skins-win { width: 1020px; }
+.skins-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.skins-toolbar .f-text { width: auto; flex: 1; min-width: 160px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-btn { background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 999px; padding: 3px 11px; font-size: 12px; cursor: pointer; }
+.chip-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.skin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; max-height: 58vh; overflow: auto; padding: 4px; }
+.skin-card { display: flex; flex-direction: column; gap: 6px; text-align: left; background: var(--panel2); border: 2px solid transparent; border-radius: 12px; padding: 8px; cursor: pointer; color: var(--text); font: inherit; transition: border-color .12s, transform .12s; }
+.skin-card:hover { border-color: var(--border); transform: translateY(-2px); }
+.skin-card.active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--sel); }
+.skin-card-name { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.skin-card-name .check { margin-left: auto; color: var(--accent); }
+.skin-card-desc { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+.skin-card-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.skin-card-tags span { font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--hover); color: var(--muted); }
+
+.mock { position: relative; aspect-ratio: 16 / 10; border-radius: 8px; overflow: hidden; background: var(--wallpaper); font-family: var(--font); color: var(--text); border: 1px solid rgba(127, 127, 127, .25); }
+.mk-app { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; }
+.mk-menu { height: 9%; flex: none; display: flex; align-items: center; gap: 5%; padding: 0 4%; background: var(--menubar-bg); border-bottom: 1px solid var(--border); }
+.mk-menu i { width: 8%; height: 28%; border-radius: 2px; background: var(--menubar-text); opacity: .45; }
+.mk-main { flex: 1; display: flex; min-height: 0; }
+.mk-stage { flex: 1; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6%; background: var(--welcome-bg); }
+.mk-logo { width: 16%; aspect-ratio: 1; border-radius: 22%; background: var(--play-bg); box-shadow: var(--play-shadow); }
+.mk-title { width: 34%; height: 5%; border-radius: 2px; background: var(--welcome-text); opacity: .8; }
+.mk-btns { display: flex; gap: 4%; width: 70%; justify-content: center; }
+.mk-btns i { width: 22%; height: 9px; border-radius: 3px; background: var(--welcome-btn-bg); border: 1px solid var(--welcome-btn-border); }
+.mk-pl { width: 30%; display: flex; flex-direction: column; gap: 7%; padding: 5% 4%; background: var(--pl-bg); border-left: 1px solid var(--border); }
+.mk-pl i { height: 6%; border-radius: 2px; background: var(--text); opacity: .25; }
+.mk-pl i:nth-child(2) { background: var(--accent); opacity: .9; }
+.mk-ctrl { flex: none; padding: 2.5% 4% 3%; background: var(--controls-bg); border-top: 1px solid var(--border); }
+.mk-seek { height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
+.mk-seek b { display: block; width: 42%; height: 100%; background: var(--seek-fill); }
+.mk-bar { display: flex; align-items: center; gap: 3%; margin-top: 3%; }
+.mk-play { width: 9%; aspect-ratio: 1; flex: none; border-radius: var(--play-radius); background: var(--play-bg); box-shadow: var(--play-shadow); }
+.mk-bar i { width: 4.5%; aspect-ratio: 1; flex: none; border-radius: 2px; background: var(--tb-text); opacity: .55; }
+.mk-bar em { flex: 1; }
+.mk-vol { width: 15%; height: 7px; background: var(--accent); clip-path: polygon(0 100%, 100% 0, 100% 100%); }
+.mk-status { flex: none; height: 5%; background: var(--statusbar-bg); border-top: 1px solid var(--border); }
+.mk-lay-floating .mk-menu { margin: 3% 3% 0; border: 1px solid var(--border); border-radius: 4px; }
+.mk-lay-floating .mk-main { margin: 3% 3% 0; gap: 3%; }
+.mk-lay-floating .mk-stage, .mk-lay-floating .mk-pl { border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+.mk-lay-floating .mk-ctrl { margin: 3%; border: 1px solid var(--border); border-radius: 5px; }
+.mk-lay-floating .mk-status { margin: 0 3% 3%; border: 1px solid var(--border); border-radius: 3px; }
+.mk-lay-framed { inset: 6%; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0, 0, 0, .3); }
+.mk-lay-compact .mk-ctrl { display: flex; align-items: center; gap: 3%; }
+.mk-lay-compact .mk-seek { order: 2; flex: 1; }
+.mk-lay-compact .mk-bar { margin: 0; flex: none; width: 52%; }
+.mk-lay-compact .mk-status { display: none; }
+.mk-lay-cinema .mk-ctrl { position: absolute; left: 10%; right: 10%; bottom: 5%; border: 1px solid var(--border); border-radius: 5px; }
+.mk-lay-cinema .mk-status { display: none; }
+.mk-lay-left .mk-main { flex-direction: row-reverse; }
+.mk-lay-left .mk-pl { border-left: 0; border-right: 1px solid var(--border); }
+.mk-lay-center .mk-bar { justify-content: center; }
+.mk-lay-center .mk-bar em { flex: 0 0 6%; }
+.layout-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.skins-accent { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+@media (max-width: 600px) { .skin-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); max-height: 62vh; } }

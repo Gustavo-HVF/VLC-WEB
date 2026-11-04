@@ -5,8 +5,11 @@
 
   const DEFAULTS = {
     /* Interface */
-    theme: 'dark',                 // dark | light | system
+    theme: 'dark',                 // (legado) dark | light | system — substituído por "skin"
+    skin: 'default',               // tema visual (ver js/core/skins.js) ou "auto"
+    layout: 'auto',                // estrutura do layout: auto (do tema) | classic | floating | framed | ...
     accent: '#ff8800',
+    accentOverride: false,         // true = usa "accent" no lugar da cor do tema
     minimalView: false,
     showStatusbar: true,
     showAdvancedControls: false,
@@ -96,7 +99,10 @@
     constructor() {
       super();
       this.defaults = DEFAULTS;
-      this.data = Object.assign({}, DEFAULTS, U.store.get('settings', {}));
+      const stored = U.store.get('settings', {});
+      // migração: a preferência antiga "theme" vira o tema visual equivalente
+      if (stored && !stored.skin && stored.theme) stored.skin = stored.theme === 'light' ? 'light' : stored.theme === 'system' ? 'auto' : 'default';
+      this.data = Object.assign({}, DEFAULTS, stored);
     }
     get(key) { return this.data[key]; }
     set(key, value) {
