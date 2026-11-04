@@ -1,0 +1,26 @@
+{
+  "name": "VLC Web — reprodutor de mídia",
+  "short_name": "VLC Web",
+  "description": "Reprodutor multimídia completo no navegador, com os recursos da versão para computador do VLC.",
+  "lang": "pt-BR",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1e1f22",
+  "theme_color": "#1e1f22",
+  "icons": [
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "file_handlers": [
+    {
+      "action": "./index.html",
+      "accept": {
+        "video/*": [".mp4", ".m4v", ".webm", ".mkv", ".mov", ".avi", ".wmv", ".flv", ".mpg", ".mpeg", ".ts", ".m2ts", ".3gp", ".ogv", ".vob"],
+        "audio/*": [".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg", ".opus", ".wma", ".aiff", ".ape", ".mka"],
+        "application/x-mpegurl": [".m3u", ".m3u8"],
+        "application/xspf+xml": [".xspf"],
+        "audio/x-scpls": [".pls"]
+      }
+    }
+  ]
+}

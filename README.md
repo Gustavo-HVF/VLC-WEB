@@ -1,0 +1,125 @@
+# VLC Web
+
+Reprodutor multimídia que roda no navegador, feito em **HTML, CSS e JavaScript puros** (sem etapa de build), que leva para a web os recursos da versão para computador do VLC media player: lista de reprodução, legendas, equalizador e efeitos de áudio, filtros de vídeo, captura, gravação, conversão, transmissão e muito mais.
+
+Todo o processamento acontece no computador do usuário: nenhum arquivo é enviado para servidores.
+
+> Projeto independente, inspirado no VLC media player. Não é afiliado nem endossado pela VideoLAN.
+
+## Como executar
+
+Basta servir a pasta por HTTP(S). Qualquer servidor estático serve (GitHub Pages, Netlify, nginx, Apache…).
+
+```bash
+node tools/serve.js 8080
+```
+
+Depois abra `http://localhost:8080`. O `tools/serve.js` não tem dependências e suporta requisições de intervalo (Range), necessárias para avançar em mídias abertas por URL. O `python -m http.server` funciona, mas não suporta Range.
+
+Abrir o `index.html` direto do disco (`file://`) funciona para o básico, mas o decodificador FFmpeg, a mudança de tom e a captura de câmera exigem HTTP(S) ou `localhost`.
+
+## Recursos
+
+### Mídia (abrir, converter, transmitir)
+- **Abrir arquivo, múltiplos arquivos e pasta** (inclusive subpastas), arrastar e soltar arquivos, pastas e URLs, colar com `Ctrl+V`.
+- **Abrir disco**: seleciona a pasta de um DVD (`VIDEO_TS`), Blu-ray (`BDMV`) ou CD copiado e encontra os títulos principais.
+- **Abrir transmissão de rede**: HTTP(S), **HLS** (`.m3u8`, via hls.js), **MPEG‑DASH** (`.mpd`, via dash.js), rádios Icecast/Shoutcast e listas remotas.
+- **Dispositivo de captura**: câmera e microfone (com escolha de dispositivo, resolução e taxa de quadros) e **captura da área de trabalho** (tela, janela ou aba).
+- **Mídia recente**, retomada de onde parou (perguntar, sempre ou nunca) e teclas de mídia do sistema.
+- **Decodificador FFmpeg (WebAssembly)**: arquivos que o navegador não reproduz (AVI, WMV, FLV, MPEG‑2/VOB, MKV com HEVC/AC‑3/DTS, WMA, APE…) são remultiplexados sem perdas ou convertidos localmente e reproduzidos.
+- **Converter / salvar** com perfis no estilo do VLC: H.264+MP3/AAC (MP4), VP8+Vorbis e VP9+Opus (WebM), Theora (OGG), MPEG‑2 (TS), MPEG‑4 (AVI), GIF, MP3, AAC, Vorbis, Opus, FLAC, WAV de CD e remultiplexação sem perdas. Permite editar resolução, taxa de quadros, qualidade, taxas de bits, canais e trecho (início/fim). Há também o modo **tempo real**, que grava a reprodução com os efeitos aplicados.
+- **Transmitir**: envia o vídeo processado e o áudio por WebRTC para outra aba ou janela (`receiver.html`) e para Chromecast/AirPlay (Remote Playback API).
+- **Salvar lista de reprodução** em M3U, M3U8, XSPF, PLS ou HTML. Também abre M3U, PLS, XSPF, ASX, WPL e CUE.
+
+### Reprodução
+- Reproduzir/pausar, parar, anterior/próximo, repetir (desligado, tudo, um), aleatório, parar após cada item e sair ao fim da lista.
+- **Velocidade** de 0,0625× a 16× (passos normais e finos), com opção de manter o tom (scaletempo).
+- **Saltos** muito curto, curto, médio e longo (configuráveis), **ir para tempo específico** e **quadro a quadro**.
+- **Repetição A→B**, **capítulos** (MP4, MKV, MP3/ID3, Ogg, WebVTT), **marcadores personalizados** (com extração do trecho entre dois marcadores) e **gravação** da reprodução.
+
+### Áudio
+- Volume até **200%**, mudo e normalização de volume.
+- **Equalizador de 10 bandas** com as 18 predefinições do VLC, pré-amplificação, modo de 2 passagens e bandas ISO.
+- **Compressor**, **espacializador** (reverberação), **alargador estéreo** e **mudança de tom** (±12 semitons).
+- **Modo estéreo**: estéreo, invertido, esquerdo, direito, mono, Dolby Surround e fones de ouvido.
+- **Faixas de áudio**: HLS, DASH e arquivos MKV/MP4 com várias faixas (a troca é feita pelo FFmpeg). Aceita também um **arquivo de áudio externo sincronizado**.
+- **Dispositivo de saída** (nos navegadores compatíveis), atraso de áudio e **visualizações**: espectro, espectrômetro, osciloscópio, medidor VU, Goom e espectro 3D.
+- Exibição da **capa do álbum** e dos metadados (ID3v1/v2, FLAC, Vorbis/Opus, MP4/M4A, Matroska, WAV).
+
+### Vídeo (filtros em WebGL)
+- Tela cheia com controles flutuantes, **imagem sobre imagem** (sempre no topo), zoom (¼, ½, 1:1, 2×, ajustar), **proporção** e **corte** (16:9, 4:3, 2.35:1…), transformações (girar 90°/180°/270°, espelhar, transpor) e desentrelaçamento (descartar, mesclar, bob, linear).
+- **Captura de imagem** em PNG, JPEG ou WebP, com miniatura.
+- **Efeitos**: ajuste de imagem (matiz, brilho, contraste, saturação, gama), nitidez, remoção de faixas, granulação, corte por pixels, extração e limiar de cor, sépia, posterização, negativo, gradiente/bordas/cartoon, rotação livre, zoom interativo, parede, clone, **quebra-cabeça interativo**, espelho, anaglifo 3D, borrão de movimento, desfoque, ondas, ondulação, psicodélico, redução de ruído, detecção de movimento, **arte ASCII**, **logotipo** e **letreiro** com variáveis ($t, $T, %H:%M…).
+- Vídeos de outros sites sem CORS tocam em modo de compatibilidade, com os filtros básicos aplicados via CSS.
+
+### Legendas
+- Formatos: **SRT, WebVTT, ASS/SSA, MicroDVD (SUB), SubViewer/SBV, MPL2, LRC (letras), SAMI e TTML/DFXP**, além das faixas embutidas (HLS e MKV/MP4 via FFmpeg).
+- Carregamento automático de legendas com o mesmo nome do vídeo e detecção de codificação (UTF-8, Windows-1252 e outras 25).
+- **Atraso** (G/H), velocidade, fator de duração e **sincronização assistida** (Shift+H, Shift+J, Shift+K), com exportação da legenda já sincronizada.
+- Aparência configurável: fonte, tamanho, cor, opacidade, contorno, sombra, fundo e posição.
+
+### Interface
+- Menus completos como no VLC (Mídia, Reprodução, Áudio, Vídeo, Legenda, Ferramentas, Exibir, Ajuda) e **menu de contexto**.
+- **Lista de reprodução** encaixada ou flutuante, com busca, colunas configuráveis, ordenação, arrastar para reordenar e seleção múltipla.
+- **Biblioteca de mídia** (IndexedDB), **Meu computador** (pastas com acesso persistente), **Rádios da Internet** (diretório radio-browser.info) e **Podcasts** (RSS).
+- **Preferências** (Interface, Áudio, Vídeo, Legendas/OSD, Entrada/Codecs) com exportação e importação.
+- **Teclas de atalho** do VLC, todas reconfiguráveis.
+- **Barra de ferramentas personalizável** (arrastar e soltar), **interface mínima**, tema escuro, claro ou do sistema e cor de destaque.
+- **Informações da mídia** (metadados editáveis, codec e estatísticas ao vivo), **Mensagens** com nível de detalhamento e lista de **módulos** e codecs suportados pelo navegador.
+- Layout responsivo para celulares e manifesto de aplicativo web, que permite abrir arquivos pelo sistema quando instalado.
+
+## Principais atalhos
+
+| Ação | Tecla | Ação | Tecla |
+|---|---|---|---|
+| Reproduzir/pausar | `Espaço` | Tela cheia | `F` / duplo clique |
+| Parar | `S` | Sair da tela cheia | `Esc` |
+| Anterior / próximo | `P` / `N` | Volume | `Ctrl+↑` / `Ctrl+↓`, roda do mouse |
+| Mais rápido / mais lento | `+` / `-` | Mudo | `M` |
+| Velocidade fina / normal | `]` `[` / `=` | Faixa de áudio / legenda | `B` / `V` |
+| Saltos | `Shift`/`Alt`/`Ctrl`/`Ctrl+Alt` + `←` `→` | Atraso da legenda | `G` / `H` |
+| Quadro a quadro | `E` | Atraso do áudio | `J` / `K` |
+| Repetição A→B | `Shift+L` | Proporção / corte / zoom | `A` / `C` / `Z` |
+| Repetir / aleatório | `L` / `R` | Capturar imagem | `Shift+S` |
+| Ir para o tempo | `Ctrl+T` | Gravar | `Shift+R` |
+| Abrir arquivo / pasta | `Ctrl+O` / `Ctrl+F` | Efeitos e filtros | `Ctrl+E` |
+| Abrir rede | `Ctrl+N` (ou `Alt+N`) | Preferências | `Ctrl+P` |
+| Lista de reprodução | `Ctrl+L` | Informações | `Ctrl+I` / `Ctrl+J` |
+| Interface mínima | `Ctrl+H` | Ajuda / Sobre | `F1` / `Shift+F1` |
+
+A lista completa fica em *Ajuda → Teclas de atalho* e pode ser alterada em *Preferências → Teclas de atalho*.
+
+## Limitações dos navegadores
+
+Algumas funções do VLC para computador dependem de acesso ao sistema que páginas web não têm:
+- leitura direta de unidades de DVD/Blu-ray/CD (é preciso selecionar a pasta copiada; discos protegidos por CSS/AACS não funcionam);
+- protocolos RTSP, RTP/UDP, RTMP, MMS, SMB, FTP, UPnP/DLNA e SAP;
+- TV digital ou analógica, VLM e guia de programas;
+- servir transmissões HTTP para outros computadores (a transmissão é feita por WebRTC para abas do mesmo navegador ou por Chromecast/AirPlay);
+- papel de parede da área de trabalho e extensões em Lua (como o VLsub).
+
+Também é preciso considerar que:
+- URLs de outros sites precisam permitir CORS para os efeitos de áudio/vídeo, a gravação e a conversão funcionarem;
+- o decodificador FFmpeg baixa cerca de 31 MB na primeira vez e processa o arquivo na memória do navegador, então arquivos muito grandes (mais de ~1,5 GB) podem não caber.
+
+## Estrutura
+
+```
+index.html              página principal
+receiver.html           receptor da transmissão WebRTC local
+css/app.css             estilos (temas escuro e claro, responsivo)
+js/core/                utilitários, preferências e registro de mensagens
+js/media/               player, motor de áudio, renderizador WebGL, legendas, metadados,
+                        visualizações, lista de reprodução, biblioteca, FFmpeg e gravação
+js/ui/                  janelas, menus, ações/atalhos, controles, lista e diálogos
+js/app.js               inicialização e integração
+vendor/                 hls.js (Apache-2.0), dash.js (BSD-3), carregador do ffmpeg.wasm (MIT)
+tools/serve.js          servidor local de desenvolvimento
+```
+
+## Licenças de terceiros
+
+- [hls.js](https://github.com/video-dev/hls.js): Apache License 2.0
+- [dash.js](https://github.com/Dash-Industry-Forum/dash.js): BSD 3-Clause
+- [ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm): MIT. O núcleo FFmpeg (LGPL/GPL) é carregado sob demanda de cdn.jsdelivr.net.
+- Diretório de rádios: [radio-browser.info](https://www.radio-browser.info/)

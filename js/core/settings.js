@@ -1,0 +1,127 @@
+/* VLC Web — preferências persistentes (equivalente a Ferramentas → Preferências) */
+(function (VW) {
+  'use strict';
+  const U = VW.util;
+
+  const DEFAULTS = {
+    /* Interface */
+    theme: 'dark',                 // dark | light | system
+    accent: '#ff8800',
+    minimalView: false,
+    showStatusbar: true,
+    showAdvancedControls: false,
+    playlistVisible: false,
+    playlistDocked: true,
+    playlistWidth: 380,
+    playlistColumns: ['title', 'duration', 'artist'],
+    fsControlsTimeout: 3,          // segundos para esconder os controles em tela cheia
+    pauseOnHidden: false,          // pausar quando a aba fica oculta (≈ "pausar ao minimizar")
+    resumePlayback: 'ask',         // ask | always | never
+    showMediaChangePopup: true,    // mostra o título ao trocar de mídia
+    saveRecent: true,
+    maxRecent: 15,
+    startPaused: false,
+    playAndStop: false,            // parar após cada item
+    playAndExit: false,            // sair ao final da lista
+    clickToPause: false,
+    doubleClickFullscreen: true,
+    wheelAction: 'volume',         // volume | seek | none
+    toolbar: ['play', 'sep', 'prev', 'stop', 'next', 'sep', 'fullscreen', 'effects', 'playlist', 'loop', 'shuffle', 'spacer', 'volume'],
+    advToolbar: ['record', 'snapshot', 'abloop', 'frame'],
+    useFilePicker: true,           // usa File System Access API quando disponível
+
+    /* Áudio */
+    audioEnabled: true,
+    volume: 1,
+    maxVolume: 1.25,               // 125% como no VLC (pode ir até 200%)
+    rememberVolume: true,
+    volumeStep: 0.05,
+    normalize: false,
+    normalizeLevel: 2.0,
+    preservePitch: true,           // "scaletempo"
+    visualization: 'none',         // none | spectrum | spectrometer | scope | vumeter | goom | spectrum3d
+    audioDevice: 'default',
+    preferredAudioLang: 'por,pt',
+    eqIsoBands: false,
+
+    /* Vídeo */
+    videoEnabled: true,
+    fullscreenOnStart: false,
+    snapshotFormat: 'png',         // png | jpeg | webp
+    snapshotPrefix: 'vlcsnap-',
+    snapshotPreview: true,
+    deinterlace: 'off',            // off | on
+    deinterlaceMode: 'blend',      // discard | blend | bob | linear
+    titleOnStart: true,
+    titleTimeout: 5,
+
+    /* Legendas / OSD */
+    osdEnabled: true,
+    subsAutoload: true,
+    subsEncoding: 'auto',
+    subsFallbackEncoding: 'windows-1252',
+    subsFont: 'Arial, Helvetica, sans-serif',
+    subsSize: 'normal',            // smaller | small | normal | large | larger
+    subsScale: 100,
+    subsColor: '#ffffff',
+    subsOpacity: 100,
+    subsOutline: 'normal',         // none | thin | normal | thick
+    subsOutlineColor: '#000000',
+    subsBackground: false,
+    subsBgColor: '#000000',
+    subsBgOpacity: 50,
+    subsShadow: true,
+    subsBold: false,
+    subsMargin: 5,                 // % a partir da borda inferior
+    preferredSubLang: 'por,pt',
+    subsDelayStep: 50,             // ms
+
+    /* Entrada / Codecs */
+    imageDuration: 10,             // segundos (0 = infinito)
+    jumpVeryShort: 3,
+    jumpShort: 10,
+    jumpMedium: 60,
+    jumpLong: 300,
+    ffmpegMode: 'ask',             // ask | always | never — para formatos não suportados
+    ffmpegCoreBase: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/',
+    recordFormat: 'auto',          // auto | webm | mp4
+    recordPrefix: 'vlc-record-',
+    hlsMaxBuffer: 30,              // segundos de buffer em fluxos HLS
+
+    /* Teclas de atalho (sobrescritas do usuário: { acao: ['Ctrl+X'] }) */
+    hotkeys: {}
+  };
+
+  class Settings extends U.Emitter {
+    constructor() {
+      super();
+      this.defaults = DEFAULTS;
+      this.data = Object.assign({}, DEFAULTS, U.store.get('settings', {}));
+    }
+    get(key) { return this.data[key]; }
+    set(key, value) {
+      const old = this.data[key];
+      if (JSON.stringify(old) === JSON.stringify(value)) return;
+      this.data[key] = value;
+      this.save();
+      this.emit('change', key, value, old);
+      this.emit('change:' + key, value, old);
+    }
+    setMany(obj) { for (const k in obj) this.set(k, obj[k]); }
+    all() { return Object.assign({}, this.data); }
+    save() { U.store.set('settings', this.data); }
+    reset() {
+      const old = this.data;
+      this.data = Object.assign({}, DEFAULTS);
+      this.save();
+      for (const k in DEFAULTS) {
+        if (JSON.stringify(old[k]) !== JSON.stringify(DEFAULTS[k])) {
+          this.emit('change', k, DEFAULTS[k], old[k]);
+          this.emit('change:' + k, DEFAULTS[k], old[k]);
+        }
+      }
+    }
+  }
+
+  VW.Settings = Settings;
+})(window.VW = window.VW || {});
