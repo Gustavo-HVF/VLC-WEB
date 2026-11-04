@@ -34,7 +34,8 @@
         convert: (items, preset) => VW.dialogsInfo.convert(this, items, preset),
         stream: () => VW.dialogsInfo.stream(this),
         help: () => VW.dialogsInfo.help(this),
-        about: () => VW.dialogsInfo.about(this)
+        about: () => VW.dialogsInfo.about(this),
+        skins: tab => VW.dialogsSkins.gallery(this, tab)
       };
       this.defineActions();
       this.menu = new VW.ui.MenuSystem(U.$('#menubar'), this.menuDefs(), id => this.actions.shortcutLabel(id));
@@ -168,6 +169,16 @@
       def('minimal', 'Interface mínima', () => S.set('minimalView', !S.get('minimalView')), ['Ctrl+H'], 'Exibir');
       def('advanced-controls', 'Controles avançados', () => S.set('showAdvancedControls', !S.get('showAdvancedControls')), [], 'Exibir');
       def('statusbar', 'Barra de status', () => S.set('showStatusbar', !S.get('showStatusbar')), [], 'Exibir');
+      def('skin-gallery', 'Galeria de temas e layouts…', () => this.dialogs.skins('skins'), ['Alt+K'], 'Exibir');
+      def('skin-next', 'Próximo tema', () => this.cycleSkin(1), ['Ctrl+Alt+K'], 'Exibir');
+      def('skin-prev', 'Tema anterior', () => this.cycleSkin(-1), ['Ctrl+Alt+Shift+K'], 'Exibir');
+      def('layout-cycle', 'Próxima estrutura de layout', () => {
+        const ids = Object.keys(VW.skins.LAYOUTS);
+        const cur = VW.skins.layoutOf(S, VW.skins.resolve(S.get('skin')));
+        const n = ids[(ids.indexOf(cur) + 1) % ids.length];
+        S.set('layout', n);
+        this.controls.osd('Layout: ' + VW.skins.LAYOUTS[n].name);
+      }, ['Alt+L'], 'Exibir');
       def('help', 'Ajuda', () => this.dialogs.help(), ['F1'], 'Ajuda');
       def('about', 'Sobre', () => this.dialogs.about(), ['Shift+F1'], 'Ajuda');
     }
@@ -225,7 +236,18 @@
       const deintModeMenu = () => [['discard', 'Descartar'], ['blend', 'Mesclar'], ['bob', 'Bob'], ['linear', 'Linear']].map(([v, l]) => ({ label: l, radio: true, checked: S.get('deinterlaceMode') === v, action: () => { S.set('deinterlaceMode', v); S.set('deinterlace', 'on'); } }));
       const transformMenu = () => [['none', 'Nenhuma'], ['90', 'Girar 90°'], ['180', 'Girar 180°'], ['270', 'Girar 270°'], ['hflip', 'Inverter horizontalmente'], ['vflip', 'Inverter verticalmente'], ['transpose', 'Transpor'], ['antitranspose', 'Antitranspor']]
         .map(([v, l]) => ({ label: l, radio: true, checked: v === 'none' ? !R.p.transform : R.p.transform && R.p.transformType === v, action: () => { if (v === 'none') R.set('transform', false); else { R.set('transformType', v); R.set('transform', true); } } }));
-      const themeMenu = () => [['dark', 'Escuro'], ['light', 'Claro'], ['system', 'Seguir o sistema']].map(([v, l]) => ({ label: l, radio: true, checked: S.get('theme') === v, action: () => S.set('theme', v) }));
+      const themeMenu = () => [
+        { label: 'Galeria de temas e layouts…', icon: 'palette', shortcut: 'skin-gallery', action: () => this.dialogs.skins('skins') },
+        { label: 'Próximo tema', shortcut: 'skin-next', action: () => this.cycleSkin(1) },
+        { sep: true },
+        { label: 'Automático (claro/escuro do sistema)', radio: true, checked: S.get('skin') === 'auto', action: () => S.set('skin', 'auto') }
+      ].concat(VW.skins.SKINS.map(s => ({ label: s.name, hint: s.desc, radio: true, checked: S.get('skin') === s.id, action: () => S.set('skin', s.id) })));
+      const layoutMenu = () => {
+        const cur = S.get('layout');
+        const skin = VW.skins.resolve(S.get('skin'));
+        return [{ label: `Automático (do tema: ${VW.skins.LAYOUTS[skin.layout].name})`, radio: true, checked: cur === 'auto', action: () => S.set('layout', 'auto') }, { sep: true }]
+          .concat(Object.entries(VW.skins.LAYOUTS).map(([id, l]) => ({ label: l.name, hint: l.desc, radio: true, checked: cur === id, action: () => S.set('layout', id) })));
+      };
 
       this.menus = {
         media: () => [
@@ -323,7 +345,8 @@
           { label: 'Interface em tela cheia', checked: !!document.fullscreenElement, shortcut: 'fullscreen', action: A('fullscreen') },
           { label: 'Controles avançados', checked: S.get('showAdvancedControls'), action: A('advanced-controls') },
           { sep: true },
-          { label: 'Tema', submenu: themeMenu },
+          { label: 'Tema (skin)', icon: 'palette', submenu: themeMenu },
+          { label: 'Estrutura do layout', icon: 'layout', submenu: layoutMenu },
           item('Personalizar interface…', 'customize')
         ],
         help: () => [
@@ -636,7 +659,7 @@
             catch (e) { if (s.href) { const l = pw.document.createElement('link'); l.rel = 'stylesheet'; l.href = s.href; pw.document.head.appendChild(l); } }
           }
           pw.document.body.className = 'pip-body';
-          pw.document.documentElement.dataset.theme = document.documentElement.dataset.theme;
+          VW.skins.apply(this.settings, pw.document);
           const svg = U.$('#icons');
           if (svg) pw.document.body.appendChild(svg.cloneNode(true));
           const placeholder = el('div', { id: 'stage-placeholder', class: 'stage-placeholder' }, U.icon('pip', 'big'), el('span', {}, 'Reproduzindo na janela de imagem sobre imagem'));
@@ -667,20 +690,28 @@
       } catch (e) { this.error('Não foi possível abrir a imagem sobre imagem: ' + e.message); }
     }
 
+    /** Aplica o tema visual (skin) e a estrutura de layout; reage a mudanças nas preferências. */
     applyTheme() {
       const S = this.settings;
+      let lastLayout = null;
       const set = () => {
-        let t = S.get('theme');
-        if (t === 'system') t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-        document.documentElement.dataset.theme = t;
-        document.documentElement.style.setProperty('--accent', S.get('accent'));
-        const meta = U.$('meta[name="theme-color"]');
-        if (meta) meta.content = t === 'light' ? '#f3f3f3' : '#1e1f22';
+        const { layout } = VW.skins.apply(S);
+        if (this.pipWin) VW.skins.apply(S, this.pipWin.document);
+        // a estrutura muda o tamanho do palco: reposiciona o vídeo e as legendas
+        if (layout !== lastLayout) { lastLayout = layout; setTimeout(() => this.player.renderer.layout(), 30); }
       };
       set();
-      S.on('change:theme', set);
-      S.on('change:accent', set);
-      window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', set);
+      for (const k of ['skin', 'layout', 'accent', 'accentOverride']) S.on('change:' + k, set);
+      window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (S.get('skin') === 'auto') set(); });
+    }
+
+    /** Alterna para o tema seguinte/anterior da lista. */
+    cycleSkin(dir = 1) {
+      const list = VW.skins.SKINS;
+      const cur = VW.skins.resolve(this.settings.get('skin')).id;
+      const next = list[(list.findIndex(s => s.id === cur) + dir + list.length) % list.length];
+      this.settings.set('skin', next.id);
+      this.controls.osd('Tema: ' + next.name);
     }
 
     applyMinimal() {

@@ -495,6 +495,7 @@
         <li><b>dash.js</b> — BSD 3-Clause (DASH Industry Forum)</li>
         <li><b>ffmpeg.wasm</b> — MIT; núcleo <b>FFmpeg</b> — LGPL/GPL (carregado sob demanda de cdn.jsdelivr.net)</li>
         <li>Diretório de rádios: <b>radio-browser.info</b></li>
+        <li>Fontes de alguns temas: <b>Google Fonts</b> — SIL Open Font License / Apache 2.0 (carregadas sob demanda)</li>
       </ul>` }));
     w.footer.append(F.button('Mensagens / módulos', () => { w.close(); messages(app); }), el('span', { class: 'grow' }), F.button('Fechar', () => w.close(), 'primary'));
     w.show();

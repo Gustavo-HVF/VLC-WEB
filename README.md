@@ -58,6 +58,14 @@ Abrir o `index.html` direto do disco (`file://`) funciona para o básico, mas o 
 - **Atraso** (G/H), velocidade, fator de duração e **sincronização assistida** (Shift+H, Shift+J, Shift+K), com exportação da legenda já sincronizada.
 - Aparência configurável: fonte, tamanho, cor, opacidade, contorno, sombra, fundo e posição.
 
+### Temas (skins) e layouts
+- **31 temas visuais**, escolhidos na galeria (*Exibir → Tema → Galeria de temas e layouts*, `Alt+K`), com miniaturas, busca e filtros por estilo:
+  VLC Web escuro e claro, **Vidro (Glassmorphism)**, **Frutiger Aero**, **Dreamcore**, Vaporwave, Synthwave, Cyberpunk, Y2K cromado, Alumínio escovado, Neumorfismo, Material You, Acrílico (Fluent), Neobrutalismo, Terminal (fósforo verde), 8-bit, Cottagecore, Lo-fi café, Oceano profundo, Floresta, Pôr do sol, Sakura, Galáxia, Nórdico, Drácula, Solarizado, Alto contraste, AMOLED, Retrô 95 (Web 1.0), Liminal (Backrooms) e Steampunk.
+- Vários temas têm **fundos animados**, como bolhas, nuvens, estrelas, chuva, pétalas, vaga-lumes, grade neon e linhas de varredura de CRT. As animações pausam durante a reprodução e respeitam a preferência do sistema por menos movimento.
+- **9 estruturas de layout**, combináveis com qualquer tema: Clássico, Cartões flutuantes, Janela com moldura, Moldura + cartões, Compacto (barra única), Cinema (controles sobre o vídeo), Lista à esquerda, Controles centralizados e Centralizado flutuante. Cada tema sugere uma estrutura, e `Alt+L` alterna entre elas.
+- Modo automático que segue o modo claro/escuro do sistema, cor de destaque personalizável e botão "Surpreenda-me".
+- Os temas são definidos só com variáveis CSS em `css/skins.css`. Para criar um novo, basta adicionar um bloco `[data-skin="meu-tema"]` e registrá-lo em `js/core/skins.js`.
+
 ### Interface
 - Menus completos como no VLC (Mídia, Reprodução, Áudio, Vídeo, Legenda, Ferramentas, Exibir, Ajuda) e **menu de contexto**.
 - **Lista de reprodução** encaixada ou flutuante, com busca, colunas configuráveis, ordenação, arrastar para reordenar e seleção múltipla.
@@ -86,6 +94,7 @@ Abrir o `index.html` direto do disco (`file://`) funciona para o básico, mas o 
 | Abrir rede | `Ctrl+N` (ou `Alt+N`) | Preferências | `Ctrl+P` |
 | Lista de reprodução | `Ctrl+L` | Informações | `Ctrl+I` / `Ctrl+J` |
 | Interface mínima | `Ctrl+H` | Ajuda / Sobre | `F1` / `Shift+F1` |
+| Galeria de temas | `Alt+K` | Próximo tema / layout | `Ctrl+Alt+K` / `Alt+L` |
 
 A lista completa fica em *Ajuda → Teclas de atalho* e pode ser alterada em *Preferências → Teclas de atalho*.
 
@@ -107,8 +116,9 @@ Também é preciso considerar que:
 ```
 index.html              página principal
 receiver.html           receptor da transmissão WebRTC local
-css/app.css             estilos (temas escuro e claro, responsivo)
-js/core/                utilitários, preferências e registro de mensagens
+css/app.css             estilos base (tokens de tema, responsivo)
+css/skins.css           31 temas, 9 estruturas de layout e fundos animados
+js/core/                utilitários, preferências, registro de mensagens e catálogo de temas
 js/media/               player, motor de áudio, renderizador WebGL, legendas, metadados,
                         visualizações, lista de reprodução, biblioteca, FFmpeg e gravação
 js/ui/                  janelas, menus, ações/atalhos, controles, lista e diálogos
@@ -123,3 +133,4 @@ tools/serve.js          servidor local de desenvolvimento
 - [dash.js](https://github.com/Dash-Industry-Forum/dash.js): BSD 3-Clause
 - [ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm): MIT. O núcleo FFmpeg (LGPL/GPL) é carregado sob demanda de cdn.jsdelivr.net.
 - Diretório de rádios: [radio-browser.info](https://www.radio-browser.info/)
+- Alguns temas usam fontes do [Google Fonts](https://fonts.google.com/) (Quicksand, Nunito, Orbitron, Share Tech Mono, Roboto, Space Grotesk, VT323, Press Start 2P, Lora, Cinzel; licença SIL OFL/Apache). Elas são carregadas só quando o tema é escolhido; sem conexão, o tema usa fontes do sistema.
