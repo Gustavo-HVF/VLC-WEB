@@ -63,6 +63,9 @@ jobs:
           cache: npm
           cache-dependency-path: android-app/package-lock.json
 
+      # guarda as dependências do Gradle entre execuções (menos downloads, menos falhas de rede)
+      - uses: gradle/actions/setup-gradle@v4
+
       - name: Instalar o Capacitor
         run: npm ci
 
@@ -84,7 +87,8 @@ jobs:
           VLCWEB_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          # uma nova tentativa se algum download de dependência falhar (erros 5xx temporários dos repositórios)
+          ./gradlew assembleRelease --no-daemon --stacktrace || { echo "::warning::Falha na compilação; tentando de novo em 20 s"; sleep 20; ./gradlew assembleRelease --no-daemon --stacktrace; }
 
       - name: Preparar o arquivo
         run: cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/VLC-Web.apk"
