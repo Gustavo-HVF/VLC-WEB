@@ -7,7 +7,7 @@
   const { Win, F } = VW.ui;
 
   const LANGS = { por: 'Português', pt: 'Português', 'pt-br': 'Português (Brasil)', eng: 'Inglês', en: 'Inglês', spa: 'Espanhol', es: 'Espanhol', fre: 'Francês', fra: 'Francês', fr: 'Francês', ger: 'Alemão', deu: 'Alemão', de: 'Alemão', ita: 'Italiano', it: 'Italiano', jpn: 'Japonês', ja: 'Japonês', kor: 'Coreano', ko: 'Coreano', chi: 'Chinês', zho: 'Chinês', zh: 'Chinês', rus: 'Russo', ru: 'Russo', ara: 'Árabe', ar: 'Árabe', hin: 'Hindi', dut: 'Holandês', nld: 'Holandês', pol: 'Polonês', tur: 'Turco', swe: 'Sueco', nor: 'Norueguês', dan: 'Dinamarquês', fin: 'Finlandês', gre: 'Grego', ell: 'Grego', heb: 'Hebraico', tha: 'Tailandês', vie: 'Vietnamita', ukr: 'Ucraniano', cze: 'Tcheco', ces: 'Tcheco', hun: 'Húngaro', rum: 'Romeno', ron: 'Romeno' };
-  const langName = l => l ? (LANGS[String(l).toLowerCase()] || l) : '';
+  const langName = l => { const n = U.langName(l); return n && n.toLowerCase() !== String(l).toLowerCase() ? `${n} [${l}]` : (LANGS[String(l || '').toLowerCase()] || l || ''); };
 
   /* ======================= Informações da mídia ======================= */
   function mediaInfo(app, tab = 'general', item) {
@@ -17,6 +17,7 @@
     if (!item) { app.error('Nenhuma mídia selecionada.'); return; }
     const w = new Win({ id: 'media-info', title: tab === 'codec' ? 'Informações do codec' : 'Informações da mídia', width: 680, icon: 'info', className: 'info-win' });
     if (item.file && !item.info) p.readMeta(item).then(() => { if (Win.get('media-info') === w) { w.close(); mediaInfo(app, w.tabs.active, item); } });
+    else if (item.url && !item.file && !item.remote) p.inspectRemote(item).then(() => { if (Win.get('media-info') === w && (item.info || item.remote)) { w.close(); mediaInfo(app, w.tabs.active, item); } });
 
     /* Geral (editável) */
     const fields = [['title', 'Título'], ['artist', 'Artista'], ['album', 'Álbum'], ['albumArtist', 'Artista do álbum'], ['genre', 'Gênero'], ['track', 'Faixa nº'], ['date', 'Data'],
@@ -53,6 +54,16 @@
     if (item.info) { addKV('Formato', item.info.container || '—'); for (const [k, v] of Object.entries(item.info.extra)) addKV(k, v); }
     if (item.probe) for (const [k, v] of Object.entries(item.probe.metadata || {})) addKV(k, v);
     if (item.file) { addKV('Arquivo', item.file.name); addKV('Tamanho', U.fmtBytes(item.file.size) + ` (${item.file.size.toLocaleString('pt-BR')} bytes)`); addKV('Modificado em', new Date(item.file.lastModified).toLocaleString('pt-BR')); addKV('Tipo MIME', item.file.type || '—'); }
+    if (item.url && item.remote) {
+      const r = item.remote;
+      if (item.remoteName) addKV('Nome do arquivo (servidor)', item.remoteName);
+      if (isFinite(r.size)) addKV('Tamanho', U.fmtBytes(r.size) + ` (${r.size.toLocaleString('pt-BR')} bytes)`);
+      if (r.type) addKV('Tipo MIME (servidor)', r.type);
+      addKV('Acesso pela página (CORS)', r.cors ? 'permitido' : 'bloqueado — reprodução em modo de compatibilidade');
+      if (r.cors) addKV('Leitura parcial (Range)', r.range ? 'sim' : 'não');
+      if (r.status >= 400) addKV('Resposta do servidor', 'HTTP ' + r.status);
+      if (item.downloaded) addKV('Cópia local', 'baixada nesta sessão');
+    }
     if (!extra.children.length) addKV('—', 'Nenhum metadado extra');
 
     /* Codec */
@@ -83,7 +94,7 @@
           if (t.lang) rows.push(['Idioma', langName(t.lang)]);
           if (t.name) rows.push(['Descrição', t.name]);
           if (t.width) rows.push(['Resolução de vídeo', `${t.width}x${t.height}`]);
-          if (t.channels) rows.push(['Canais', t.channels]);
+          if (t.channels) rows.push(['Canais', typeof t.channels === 'number' ? `${t.channels} (${U.channelsLabel(t.channels)})` : t.channels]);
           if (t.sampleRate) rows.push(['Taxa de amostragem', t.sampleRate + ' Hz']);
           if (t.bits) rows.push(['Bits por amostra', t.bits]);
           if (t.default !== undefined && t.type !== 'video') rows.push(['Padrão', t.default ? 'sim' : 'não']);
@@ -484,7 +495,7 @@
     if (ex) { ex.focus(); return; }
     const w = new Win({ id: 'about', title: 'Sobre', width: 560, icon: 'info', className: 'about-win', modal: true });
     w.body.appendChild(el('div', { class: 'about', html: `
-      <img src="assets/icon.svg" alt="" class="about-logo" width="96" height="96">
+      <img src="assets/logo.png" alt="VLC Web" class="about-logo" width="104" height="104">
       <h2>VLC Web <small>${VW.VERSION}</small></h2>
       <p>Reprodutor multimídia para o navegador escrito em HTML, CSS e JavaScript, que reproduz os recursos da versão para computador do VLC media player: lista de reprodução, legendas, equalizador e efeitos de áudio, filtros de vídeo, captura, gravação, conversão, transmissão e muito mais.</p>
       <p class="muted small">Projeto independente, inspirado no VLC media player. Não é afiliado, patrocinado nem endossado pela VideoLAN. "VLC" é uma marca da VideoLAN.</p>

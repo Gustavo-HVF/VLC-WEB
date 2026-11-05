@@ -57,6 +57,7 @@
       this.log.info('main', `VLC Web ${VW.VERSION} iniciado — ${navigator.userAgent}`);
       this.handleLaunchQueue();
       this.handleUrlParams();
+      VW.remote.cleanup();
     }
 
     /* ======================= Ações ======================= */
@@ -218,6 +219,9 @@
         // "Desativar" vale só para a mídia atual (como no VLC), não é mais uma preferência permanente
         const list = [{ label: 'Desativar', radio: true, checked: p.audioTrackOff, action: () => p.setAudioTrackOff(true) }];
         if (!t.length && has()) list.push({ label: 'Faixa 1', radio: true, checked: !p.audioTrackOff, action: () => p.setAudioTrackOff(false) });
+        // link sem CORS: a página não consegue ler as faixas do arquivo — explica as alternativas
+        const it = p.item;
+        if (!t.length && has() && it && it.url && !it.file && it.remote && !it.remote.cors) list.push({ sep: true }, { label: 'Outras faixas: indisponíveis neste link (servidor sem CORS)…', action: () => this.showRemoteHelp(it, { reason: 'track' }) });
         if (!S.get('audioEnabled')) list.push({ sep: true }, { label: 'Ativar o áudio (desligado nas Preferências)', action: () => S.set('audioEnabled', true) });
         return list.concat(t.map(x => ({ label: x.label, radio: true, checked: x.active && !p.audioTrackOff, action: () => p.selectAudioTrack(x.id) })));
       };
@@ -588,7 +592,8 @@
     }
 
     async openURL(url, opts = {}) {
-      url = url.trim();
+      url = U.cleanUrl(url);
+      if (!url) return [];
       if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = 'https://' + url;
       // listas de reprodução remotas
       if (/\.(m3u|pls|xspf|asx)(\?|$)/i.test(url) || (/\.m3u8(\?|$)/i.test(url) && false)) {
@@ -779,7 +784,7 @@
         if (U.isTyping(e)) return;
         const files = Array.from(e.clipboardData.files || []);
         if (files.length) { e.preventDefault(); this.openFiles(files.map(f => ({ file: f })), { play: true }); return; }
-        const text = e.clipboardData.getData('text').trim();
+        const text = U.cleanUrl(e.clipboardData.getData('text'));
         if (text && /^(https?|ftp|rtsp|blob):|^www\./i.test(text)) { e.preventDefault(); this.openURL(text, { play: true }); }
       });
       // arrastar e soltar em toda a janela
@@ -818,6 +823,8 @@
       p.on('request-fullscreen', () => { if (!document.fullscreenElement) this.toggleFullscreen(); });
       p.on('ffmpeg-progress', s => this.showFFProgress(s));
       p.on('ffmpeg-ask', (item, reason, soft) => this.askFFmpeg(item, reason, soft));
+      p.on('download-ask', (item, opts, done) => this.askDownload(item, opts).then(done, () => done(false)));
+      p.on('remote-help', (item, opts) => this.showRemoteHelp(item, opts));
       p.on('resume-ask', pos => this.showResume(pos));
       // o navegador bloqueou o motor de áudio: mostra o botão "Clique para ativar o som"
       const unlock = U.$('#audio-unlock');
@@ -847,12 +854,54 @@
     hideResume() { U.$('#resume-bar').hidden = true; clearTimeout(this._resumeT); }
 
     async askFFmpeg(item, reason, soft) {
+      const remote = !item.file && !!item.url;
+      if (remote) {
+        // link de rede: o FFmpeg precisa do arquivo inteiro → explica e pede para baixar
+        const size = item.remote && isFinite(item.remote.size) ? ' (' + U.fmtBytes(item.remote.size) + ')' : '';
+        const what = soft ? 'converter só o áudio (o vídeo continua tocando enquanto isso)' : 'converter o arquivo';
+        const ans = await VW.ui.F.message('Formato não suportado pelo navegador',
+          `<p>${U.escapeHtml(reason)}</p><p>Para ${what}, o VLC Web precisa primeiro <b>baixar o arquivo${size}</b> para o armazenamento temporário do navegador e depois usar o <b>decodificador FFmpeg</b> (WebAssembly, ~31 MB na primeira vez).</p>`,
+          [['yes', 'Baixar e converter'], ['no', soft ? 'Continuar assim' : 'Cancelar']], { icon: 'codec', width: 560 });
+        if (ans === 'yes') this.player.playWithFFmpeg(item, { audioOnly: soft, confirmed: true });
+        return;
+      }
       const remember = VW.ui.F.check('Sempre converter automaticamente (não perguntar novamente)', false);
       const ans = await VW.ui.F.message('Formato não suportado pelo navegador',
-        `<p>${U.escapeHtml(reason)}</p><p>O VLC Web pode usar o <b>decodificador FFmpeg</b> (WebAssembly) para remultiplexar ou converter <b>${U.escapeHtml(item.name)}</b> localmente e reproduzi-lo. Na primeira vez são baixados cerca de 31 MB; o processo pode levar alguns instantes, dependendo do tamanho do arquivo.</p>`,
-        [['yes', 'Converter e reproduzir'], ['no', soft ? 'Continuar assim' : 'Cancelar']], { extra: remember, icon: 'codec', width: 540 });
+        `<p>${U.escapeHtml(reason)}</p><p>O VLC Web pode usar o <b>decodificador FFmpeg</b> (WebAssembly) para ${soft ? 'converter apenas o áudio de' : 'remultiplexar ou converter'} <b>${U.escapeHtml(item.name)}</b> localmente e reproduzi-lo. Na primeira vez são baixados cerca de 31 MB; o processo pode levar alguns instantes, dependendo do tamanho do arquivo.</p>`,
+        [['yes', soft ? 'Converter o áudio' : 'Converter e reproduzir'], ['no', soft ? 'Continuar assim' : 'Cancelar']], { extra: remember, icon: 'codec', width: 540 });
       if (remember.input.checked && ans === 'yes') this.settings.set('ffmpegMode', 'always');
-      if (ans === 'yes') this.player.playWithFFmpeg(item);
+      if (ans === 'yes') this.player.playWithFFmpeg(item, { audioOnly: soft });
+    }
+
+    /** Pede confirmação para baixar um item de rede (trocar faixa de áudio / converter). */
+    async askDownload(item, opts = {}) {
+      const r = item.remote || {};
+      const size = isFinite(r.size) ? U.fmtBytes(r.size) : 'tamanho desconhecido';
+      const free = await VW.remote.freeSpace();
+      const low = isFinite(free) && isFinite(r.size) && r.size > free * 0.9;
+      const why = opts.reason === 'track'
+        ? `<p>O navegador só reproduz a faixa de áudio padrão de um vídeo em <i>streaming</i>. Para ouvir <b>${U.escapeHtml(opts.trackLabel || 'outra faixa')}</b>, o VLC Web baixa o arquivo e separa essa faixa com o FFmpeg. O vídeo continua tocando durante o download; depois a troca entre faixas é imediata.</p>`
+        : `<p>Para converter este link, o VLC Web precisa do arquivo completo.</p>`;
+      const ans = await VW.ui.F.message('Baixar o arquivo?',
+        why + `<p>Arquivo: <b>${U.escapeHtml(item.remoteName || item.name)}</b> — <b>${size}</b>.<br>Ele fica no armazenamento temporário do navegador (apagado automaticamente depois).</p>` +
+        (low ? `<p class="f-hint warn">Atenção: o espaço livre informado pelo navegador (${U.fmtBytes(free)}) pode não ser suficiente.</p>` : '') +
+        (opts.reason === 'track' ? `<p class="f-hint">Sem baixar: no Chrome ou Edge, ative <code>chrome://flags/#enable-experimental-web-platform-features</code> (no Edge, <code>edge://flags/…</code>) e reinicie o navegador — a troca de faixas de áudio passa a funcionar direto no streaming.</p>` : ''),
+        [['yes', 'Baixar'], ['no', 'Cancelar']], { icon: 'network', width: 580 });
+      return ans === 'yes';
+    }
+
+    /** O servidor não deixa a página ler o arquivo (CORS): explica as alternativas. */
+    showRemoteHelp(item, opts = {}) {
+      const r = item.remote || {};
+      const blocked = r.status >= 400
+        ? `<p>O servidor respondeu <b>HTTP ${r.status}</b> ao pedido da página — o link pode ter expirado ou exigir login.</p>`
+        : `<p>O servidor deste link não permite que outras páginas leiam o arquivo (falta o cabeçalho <b>CORS</b>). O navegador ainda consegue <i>reproduzi‑lo</i>, mas o VLC Web não consegue ler o conteúdo para ${opts.reason === 'track' ? 'separar outra faixa de áudio' : 'convertê‑lo'}.</p>`;
+      const tips = `<ul>` +
+        (opts.reason === 'track' ? `<li><b>Trocar a faixa sem baixar:</b> no Chrome ou Edge, ative <code>chrome://flags/#enable-experimental-web-platform-features</code> e reinicie o navegador. As faixas passam a aparecer no menu Áudio → Faixa de áudio.</li>` : '') +
+        `<li><b>Baixar pelo navegador</b> e abrir o arquivo em Mídia → Abrir arquivo — tudo passa a funcionar (faixas, legendas embutidas, conversão).</li></ul>`;
+      VW.ui.F.message(r.status >= 400 ? 'Acesso recusado pelo servidor' : 'O servidor bloqueia a leitura do arquivo', blocked + tips,
+        [['dl', 'Baixar pelo navegador'], ['ok', 'Fechar']], { icon: 'warning', width: 580 })
+        .then(ans => { if (ans === 'dl') window.open(item.url, '_blank', 'noopener,noreferrer'); });
     }
 
     showFFProgress(s) {

@@ -79,6 +79,8 @@
       this.hls = null;
       this.dash = null;
       this.slave = null;
+      this.slaveKind = null;        // 'extra' (arquivo externo) | 'track' (faixa extraída do próprio arquivo)
+      this._dl = null;              // download em andamento (AbortController)
       this.streamSrc = null;
       this.videoEnabled = true;
       this.syncMarks = { audio: null, sub: null };
@@ -161,6 +163,7 @@
       this.addRecent(item);
       if (item.file && !item.info) this.readMeta(item);
       else if (item.info) this.applyChapters(item);
+      else if (item.url && !item.stream) this.inspectRemote(item);
 
       if (item.missing) {
         this.fail(`Arquivo não encontrado: "${item.path || item.title}". Listas de reprodução não dão acesso a arquivos locais — abra o arquivo ou a pasta junto com a lista.`);
@@ -202,8 +205,9 @@
             return;
           }
           if (location.protocol === 'https:' && url.startsWith('http:')) this.log.warn('input', 'URL HTTP em página HTTPS: o navegador pode bloquear o conteúdo misto.');
-          if (isHls(url)) return await this.loadHls(url, token);
-          if (isDash(url)) return await this.loadDash(url, token);
+          const fext = U.ext(U.urlFileName(url));
+          if (isHls(url) || fext === 'm3u8') return await this.loadHls(url, token);
+          if (isDash(url) || fext === 'mpd') return await this.loadDash(url, token);
           el.crossOrigin = 'anonymous';
           el.src = url;
           el.load();
@@ -293,7 +297,7 @@
           if (this.slave) { this.slave.currentTime = this.media.currentTime; this.slave.play().catch(() => {}); }
           break;
         case 'pause': this.checkAudioHealth(); if (this.state !== 'stopped' && this.state !== 'ended' && !this.media.ended) this.setState('paused'); if (this.slave) this.slave.pause(); this.saveResume(); break;
-        case 'waiting': case 'stalled': if (!this.media.paused) this.setState('buffering'); break;
+        case 'waiting': case 'stalled': if (!this.media.paused) this.setState('buffering'); if (type === 'waiting' && this.slave) this.slave.pause(); break;
         case 'canplay': if (this.state === 'buffering' && !this.media.paused) this.setState('playing'); break;
         case 'ended': this.onEnded(); break;
         case 'error': this.onError(); break;
@@ -335,7 +339,9 @@
       this.emit('tracks');
       this.applyChapters(item);
       this.updateMediaSession();
-      if (item.extraAudio) this.startSlave(item.extraAudio);
+      const trackBlob = this.selectedTrackBlob(item);
+      if (trackBlob) this.startSlave(trackBlob, 'track');
+      else if (item.extraAudio) this.startSlave(item.extraAudio, 'extra');
       this.log.info('input', `Mídia carregada: ${isVid ? m.videoWidth + 'x' + m.videoHeight : 'somente áudio'}${isFinite(m.duration) ? ', ' + U.fmtTime(m.duration) : ''}`);
       if (this.autoplay) this.playMedia(); else this.setState('paused');
       if (this.settings.get('fullscreenOnStart') && isVid && !routeSwitch) this.emit('request-fullscreen');
@@ -346,9 +352,9 @@
       }
       // Vídeo esperado mas não decodificado → oferecer o FFmpeg
       const vidExt = U.EXT.video.includes(U.ext(item.name));
-      if (!isVid && vidExt && item.file && !item.playable && !this.isImage) {
+      if (!isVid && vidExt && (item.file || (item.url && !this.hls && !this.dash)) && !item.playable && !this.isImage) {
         this.suggestFFmpeg(item, 'O navegador não conseguiu decodificar a imagem deste vídeo (codec não suportado, ex.: HEVC, MPEG‑2, VC‑1).');
-      } else if (item.file && !item.playable && !this.isImage) {
+      } else if ((item.file || item.url) && !item.playable && !this.isImage && !this.hls && !this.dash) {
         this.checkAudioCodec(item);
         setTimeout(() => this.checkAudioDecoding(item), 2500);
       }
@@ -356,14 +362,18 @@
 
     /** Áudio em formato que o navegador não decodifica (AC‑3, DTS…): oferece converter só o áudio com o FFmpeg. */
     checkAudioCodec(item) {
-      if (item !== this.item || item.playable || this.suggested || !item.file) return;
+      if (item !== this.item || item.playable || this.suggested || (!item.file && !item.url) || this.slaveKind === 'track') return;
+      if (!(this.media.readyState >= 1) || this.state === 'error' || this.hls || this.dash) return;
       const name = unsupportedAudioCodec(item);
-      if (name) this.suggestFFmpeg(item, `O áudio deste arquivo está em ${name}, formato que o navegador não consegue reproduzir — por isso o som não sai.`, true, true);
+      if (!name) return;
+      const others = this.containerAudioTracks().map((t, i) => ({ t, i })).filter(x => !trackUnsupported(x.t));
+      const hint = others.length ? ` Outras faixas deste arquivo usam formatos compatíveis (menu Áudio → Faixa de áudio).` : '';
+      this.suggestFFmpeg(item, `O áudio ${item.file ? 'deste arquivo' : 'deste link'} está em ${name}, formato que o navegador não consegue reproduzir — por isso o som não sai.` + hint, true, true);
     }
 
     /** Verificação por comportamento (para codecs não identificados pelos metadados). */
     checkAudioDecoding(item) {
-      if (this.item !== item || this.media.paused || this.suggested || item.playable) return;
+      if (this.item !== item || this.media.paused || this.suggested || item.playable || this.slaveKind === 'track' || this.restricted) return;
       const m = this.media;
       const hasAudio = ((item.info && item.info.tracks) || []).some(t => t.type === 'audio');
       if (!hasAudio) return;
@@ -379,6 +389,9 @@
       if (!m || m === this.imageMedia) return;
       if (this.audio.isAttached(m)) m.muted = false;
       else m.muted = !on || !!this.slave || this.audio.muted;
+      const s = this.slave;
+      if (s && this.audio.isAttached(s)) this.audio.setSourceGain(s, on ? 1 : 0);
+      else if (s) s.muted = !on || this.audio.muted;
     }
 
     setAudioTrackOff(off) {
@@ -463,6 +476,7 @@
       if (item.url && !this.hls && !this.dash && m !== this.imageMedia && m.crossOrigin && !this.fallbackTried) {
         this.fallbackTried = true;
         this.restricted = true;
+        if (m.currentTime > 0) { this.pendingStart = m.currentTime; this.autoplay = this.autoplay || !m.paused; }
         const raw = this.videoRaw;
         if (m !== raw) { m.removeAttribute('src'); m.load(); }
         raw.removeAttribute('crossorigin');
@@ -476,7 +490,28 @@
         this.suggestFFmpeg(item, 'O navegador não suporta este formato (' + (U.ext(item.name) || 'desconhecido').toUpperCase() + ').');
         return;
       }
-      this.fail('Não foi possível reproduzir "' + item.title + '": ' + (codes[err.code] || 'erro desconhecido') + (item.url ? '. Verifique a URL e se o servidor permite acesso pelo navegador (CORS).' : '.'));
+      if (item.url && !item.file) { this.failRemote(item, err); return; }
+      this.fail('Não foi possível reproduzir "' + item.title + '": ' + (codes[err.code] || 'erro desconhecido') + '.');
+    }
+
+    /** Falha definitiva de uma URL: explica a causa provável e, se possível, oferece baixar e converter. */
+    async failRemote(item, err) {
+      const tok = this.loadToken;
+      if (this.hls || this.dash) { this.fail(`Não foi possível reproduzir "${item.title}": ${err.message || 'erro no fluxo adaptativo'}.`); return; }
+      // espera a verificação do servidor (feita em paralelo) para dar uma explicação concreta
+      if (!item.remote) await this.inspectRemote(item, { metaOnly: false });
+      if (tok !== this.loadToken) return;
+      const r = item.remote || {};
+      const st = r.status;
+      if (st === 401 || st === 403 || st === 410) return this.fail(`O servidor recusou o acesso a "${item.title}" (HTTP ${st}). Links de download com "token" costumam expirar ou só funcionar no site/aplicativo que os gerou — gere um link novo e tente outra vez.`);
+      if (st === 404) return this.fail(`O arquivo "${item.title}" não existe mais no servidor (HTTP 404). O link pode ter expirado.`);
+      if (st >= 400) return this.fail(`O servidor respondeu com erro HTTP ${st} ao abrir "${item.title}".`);
+      if (r.cors && (err.code === 3 || err.code === 4)) {
+        this.suggestFFmpeg(item, `O navegador não conseguiu reproduzir "${item.title}" diretamente (formato ou codec não suportado — p. ex. HEVC/H.265, MPEG‑2, AVI antigos).`);
+        return;
+      }
+      if (err.code === 2) return this.fail(`Erro de rede ao baixar "${item.title}". Verifique a conexão e se o link ainda é válido.`);
+      this.fail(`Não foi possível reproduzir "${item.title}". O servidor não permite acesso por outras páginas (CORS) e o navegador também não conseguiu reproduzir o arquivo diretamente — o link pode ter expirado, exigir login, bloquear reprodução fora do site de origem, ou usar um codec não suportado (ex.: HEVC/H.265). Tente baixar o arquivo e abri‑lo pelo menu Mídia → Abrir arquivo.`);
     }
 
     fail(msg) {
@@ -496,7 +531,13 @@
       this.suggested = true;
       const mode = this.settings.get('ffmpegMode');
       if (mode === 'never') { if (!soft) this.fail(reason + ' Ative o decodificador FFmpeg em Preferências → Entrada/Codecs.'); else this.emit('osd', 'Sem som: formato de áudio não suportado pelo navegador'); return; }
-      if (mode === 'always' && (!soft || autoOk)) { this.playWithFFmpeg(item); return; }
+      if (mode === 'always' && (!soft || autoOk) && item.file) { this.playWithFFmpeg(item, { audioOnly: soft }); return; }
+      if (!item.file && item.url && item.remote && !item.remote.cors) {
+        // sem CORS a página não consegue ler o arquivo: nada a converter
+        if (!soft) this.fail(reason + ' Este servidor não permite que outras páginas leiam o arquivo (CORS); baixe‑o e abra‑o pelo menu Mídia → Abrir arquivo.');
+        else this.emit('osd', 'Sem som: formato de áudio não suportado pelo navegador');
+        return;
+      }
       if (!soft) this.setState('error');
       this.emit('ffmpeg-ask', item, reason, soft);
     }
@@ -504,7 +545,17 @@
     /** Converte/remultiplexa com o FFmpeg e reproduz. */
     async playWithFFmpeg(item, opts = {}) {
       item = item || this.item;
-      if (!item || !item.file) { this.emit('error', 'O FFmpeg só pode ser usado com arquivos locais.'); return; }
+      if (!item) return;
+      if (!item.file) {
+        if (!item.url || item.stream) { this.emit('error', 'O FFmpeg só pode ser usado com arquivos locais ou links de download.'); return; }
+        if (!(await this.ensureLocal(item, { confirmed: opts.confirmed, reason: 'convert' }))) return;
+      }
+      // só o áudio é incompatível e o vídeo já toca: extrai/converte apenas a faixa de áudio (bem mais rápido)
+      if (opts.audioOnly && this.item === item && !item.playable && this.state !== 'error') {
+        const list = this.containerAudioTracks();
+        await this.useAudioTrack(item, opts.audioIndex ?? defaultAudioIndex(list));
+        return;
+      }
       const resumeAt = opts.resumeAt ?? (this.item === item ? this.currentTime : 0);
       if (this.item === item) { this.media.pause(); }
       this.emit('ffmpeg-progress', { p: 0, label: 'Carregando o motor FFmpeg…' });
@@ -518,6 +569,7 @@
         item.playable = res.blob;
         item.probe = res.probe;
         item.audioIndex = res.audioIndex;
+        item.playableAudio = res.audioIndex;
         if (!item.subsExtracted) {
           item.subsExtracted = true;
           for (const s of res.subtitles) item.subs.push(Object.assign(s.file, { _label: s.title, _lang: s.lang }));
@@ -723,30 +775,51 @@
     updateAudioView() { this.emit('audio-view'); }
 
     /* ---------- faixas ---------- */
-    fileAudioTracks() {
+    /** Faixas de áudio do contêiner (FFmpeg, se já analisado; senão o leitor de metadados — também para URLs). */
+    containerAudioTracks() {
       const it = this.item;
-      if (!it || !it.file) return [];
-      if (it.probe) return it.probe.streams.filter(s => s.type === 'audio').map(s => ({ codec: s.codec, lang: s.lang, name: s.title, channels: s.layout, default: s.default }));
+      if (!it) return [];
+      if (it.probe) return it.probe.streams.filter(s => s.type === 'audio').map(s => ({ codec: s.codec, lang: s.lang, name: s.title, channels: s.layout, default: s.default, sampleRate: s.sampleRate }));
       return ((it.info && it.info.tracks) || []).filter(t => t.type === 'audio');
+    }
+    fileAudioTracks() { return this.containerAudioTracks(); }
+
+    /** Faixa do contêiner que está tocando agora. */
+    currentAudioIndex() {
+      const it = this.item;
+      if (!it) return 0;
+      if (this.slaveKind === 'track' && it.audioIndex != null) return it.audioIndex;
+      return baseAudioIndex(it, this.containerAudioTracks());
+    }
+
+    /** Blob da faixa extraída escolhida (quando ela não é a faixa que o próprio elemento toca). */
+    selectedTrackBlob(item) {
+      if (!item || item.audioIndex == null || !item.audioCache) return null;
+      if (item.audioIndex === baseAudioIndex(item, this.containerAudioTracks())) return null;
+      return item.audioCache[item.audioIndex] || null;
     }
 
     getAudioTracks() {
       const out = [];
-      if (this.hls) this.hls.audioTracks.forEach((t, i) => out.push({ id: 'hls:' + i, label: t.name || t.lang || 'Faixa ' + (i + 1), lang: t.lang, active: this.hls.audioTrack === i }));
+      const it = this.item;
+      if (!it) return out;
+      const meta = this.containerAudioTracks();
+      if (this.hls) this.hls.audioTracks.forEach((t, i) => out.push({ id: 'hls:' + i, label: trackLabel({ name: t.name, lang: t.lang, channels: t.attrs && t.attrs.CHANNELS }, i), lang: t.lang, active: this.hls.audioTrack === i }));
       else if (this.dash) {
         const cur = this.dash.getCurrentTrackFor && this.dash.getCurrentTrackFor('audio');
-        (this.dash.getTracksFor('audio') || []).forEach((t, i) => out.push({ id: 'dash:' + i, label: (t.labels && t.labels[0] && t.labels[0].text) || t.lang || 'Faixa ' + (i + 1), lang: t.lang, active: cur === t, track: t }));
-      } else if (this.media.audioTracks && this.media.audioTracks.length > 1) {
-        for (let i = 0; i < this.media.audioTracks.length; i++) { const t = this.media.audioTracks[i]; out.push({ id: 'native:' + i, label: t.label || t.language || 'Faixa ' + (i + 1), lang: t.language, active: t.enabled }); }
-      } else {
-        const ft = this.fileAudioTracks();
-        if (ft.length > 1) {
-          const def = Math.max(0, ft.findIndex(t => t.default));
-          const cur = this.item.audioIndex ?? def;
-          ft.forEach((t, i) => out.push({ id: 'ff:' + i, label: trackLabel(t, i), lang: t.lang, active: cur === i }));
+        (this.dash.getTracksFor('audio') || []).forEach((t, i) => out.push({ id: 'dash:' + i, label: trackLabel({ name: t.labels && t.labels[0] && t.labels[0].text, lang: t.lang }, i), lang: t.lang, active: cur === t, track: t }));
+      } else if (this.media.audioTracks && this.media.audioTracks.length > 1 && this.slaveKind !== 'track') {
+        // troca nativa (Safari; Chrome/Edge com "Experimental Web Platform features")
+        const nat = this.media.audioTracks;
+        for (let i = 0; i < nat.length; i++) {
+          const t = nat[i], m = meta.length === nat.length ? meta[i] : {};
+          out.push({ id: 'native:' + i, label: trackLabel(Object.assign({}, m, { name: t.label || m.name, lang: t.language || m.lang }), i), lang: t.language || m.lang, active: t.enabled });
         }
+      } else if (meta.length) {
+        const cur = this.currentAudioIndex();
+        meta.forEach((t, i) => out.push({ id: 'ff:' + i, label: trackLabel(t, i) + (trackUnsupported(t) && !(it.audioCache && it.audioCache[i]) ? ' (requer conversão)' : ''), lang: t.lang, active: cur === i && this.slaveKind !== 'extra' }));
       }
-      if (this.item && this.item.extraAudio) out.push({ id: 'extra', label: 'Áudio externo: ' + (this.item.extraAudio.name || 'arquivo'), active: !!this.slave });
+      if (it.extraAudio) out.push({ id: 'extra', label: 'Áudio externo: ' + (it.extraAudio.name || 'arquivo'), active: this.slaveKind === 'extra' });
       return out;
     }
 
@@ -754,17 +827,163 @@
       if (this.audioTrackOff) this.setAudioTrackOff(false);
       const [kind, n] = String(id).split(':');
       const i = +n;
+      const it = this.item;
+      if (!it) return;
       if (kind === 'hls' && this.hls) this.hls.audioTrack = i;
       else if (kind === 'dash' && this.dash) { const t = this.dash.getTracksFor('audio')[i]; if (t) this.dash.setCurrentTrack(t); }
       else if (kind === 'native') { for (let k = 0; k < this.media.audioTracks.length; k++) this.media.audioTracks[k].enabled = k === i; }
       else if (kind === 'ff') {
-        if (this.item.audioIndex === i || (this.item.audioIndex == null && i === Math.max(0, this.fileAudioTracks().findIndex(t => t.default)))) { this.emit('tracks'); return; }
-        this.emit('osd', 'Trocando faixa de áudio (FFmpeg)…');
-        this.playWithFFmpeg(this.item, { audioIndex: i, resumeAt: this.currentTime });
+        const list = this.containerAudioTracks();
+        const base = baseAudioIndex(it, list);
+        if (this.slaveKind === 'extra') this.stopSlave();
+        if (i === this.currentAudioIndex() && (this.slaveKind === 'track' || i === base)) { this.emit('tracks'); return; }
+        if (i === base && (it.playable || !trackUnsupported(list[i]))) {
+          // volta à faixa que o próprio elemento de vídeo toca: instantâneo
+          if (this.slaveKind === 'track') this.stopSlave();
+          it.audioIndex = it.playable ? it.playableAudio : null;
+          this.applySourceGain();
+          this.emit('osd', 'Faixa de áudio: ' + trackLabel(list[i], i));
+        } else if (it.audioCache && it.audioCache[i]) {
+          it.audioIndex = i;
+          this.startSlave(it.audioCache[i], 'track');
+          this.emit('osd', 'Faixa de áudio: ' + trackLabel(list[i], i));
+        } else this.switchToTrack(it, i);
       } else if (kind === 'extra') {
-        if (this.slave) this.stopSlave(); else this.startSlave(this.item.extraAudio);
+        if (this.slaveKind === 'extra') {
+          this.stopSlave();
+          const b = this.selectedTrackBlob(it);
+          if (b) this.startSlave(b, 'track');
+        } else this.startSlave(it.extraAudio, 'extra');
       }
       setTimeout(() => this.emit('tracks'), 50);
+    }
+
+    /** Troca para uma faixa que o navegador não oferece: extrai-a com o FFmpeg (baixando o arquivo, se for um link). */
+    async switchToTrack(item, i) {
+      const list = this.containerAudioTracks();
+      if (!item.file) {
+        if (!item.url) return;
+        const ok = await this.ensureLocal(item, { reason: 'track', trackLabel: trackLabel(list[i] || {}, i) });
+        if (!ok || this.item !== item) return;
+      }
+      await this.useAudioTrack(item, i);
+    }
+
+    /** Extrai (ou reutiliza) a faixa de áudio i e a toca em sincronia com o vídeo. */
+    async useAudioTrack(item, i) {
+      item.audioCache = item.audioCache || {};
+      let blob = item.audioCache[i];
+      if (!blob) {
+        if (this.ffmpeg.busy) { this.emit('osd', 'O FFmpeg está ocupado com outra tarefa'); return false; }
+        this.emit('ffmpeg-progress', { p: -1, label: 'Carregando o motor FFmpeg…' });
+        try {
+          await this.ffmpeg.load(p => this.emit('ffmpeg-progress', { p, label: 'Baixando o motor FFmpeg (~31 MB, apenas na primeira vez)…' }));
+          if (!item.probe) {
+            this.emit('ffmpeg-progress', { p: -1, label: 'Analisando as faixas…' });
+            item.probe = await this.ffmpeg.probe(item.file);
+          }
+          const res = await this.ffmpeg.extractAudio(item.file, { audioIndex: i, probe: item.probe, onProgress: (p, label) => this.emit('ffmpeg-progress', { p, label }) });
+          blob = item.audioCache[i] = res.blob;
+          this.emit('ffmpeg-progress', null);
+        } catch (e) {
+          this.emit('ffmpeg-progress', null);
+          if (/terminate|cancel/i.test(e.message || String(e))) { this.emit('osd', 'Operação cancelada'); return false; }
+          this.emit('error', 'Não foi possível preparar a faixa de áudio: ' + (e.message || e));
+          return false;
+        }
+      }
+      if (this.item !== item) return false;
+      item.audioIndex = i;
+      this.suggested = true;   // o problema de áudio (se havia) foi resolvido
+      this.startSlave(blob, 'track');
+      const list = this.containerAudioTracks();
+      this.emit('osd', 'Faixa de áudio: ' + trackLabel(list[i] || {}, i));
+      this.emit('tracks');
+      return true;
+    }
+
+    /**
+     * Garante uma cópia local de um item de rede (necessária para o FFmpeg).
+     * opts: { confirmed, reason: 'track'|'convert', trackLabel }
+     */
+    async ensureLocal(item, opts = {}) {
+      if (item.file) return true;
+      if (this._dl) { this.emit('osd', 'Já existe um download em andamento'); return false; }
+      if (!item.remote) await this.inspectRemote(item);
+      const r = item.remote || {};
+      if (!r.cors || r.status >= 400) { this.emit('remote-help', item, opts); return false; }
+      if (!opts.confirmed) {
+        const ok = await new Promise(res => this.emit('download-ask', item, opts, res));
+        if (!ok) return false;
+      }
+      const ctrl = new AbortController();
+      this._dl = ctrl;
+      const t0 = performance.now();
+      const label = (l, t) => {
+        const secs = (performance.now() - t0) / 1000;
+        const speed = secs > 1 ? ' — ' + U.fmtBytes(l / secs) + '/s' : '';
+        return `Baixando "${item.title}": ${U.fmtBytes(l)}${t > 0 ? ' de ' + U.fmtBytes(t) : ''}${speed}`;
+      };
+      this.emit('ffmpeg-progress', { p: -1, label: 'Iniciando o download…' });
+      try {
+        const file = await VW.remote.download(item.url, {
+          name: item.remoteName || U.urlFileName(item.url), size: r.size, signal: ctrl.signal,
+          onProgress: (l, t) => this.emit('ffmpeg-progress', { p: t > 0 ? l / t : -1, label: label(l, t) })
+        });
+        item.file = file;
+        item.downloaded = true;
+        this.emit('ffmpeg-progress', null);
+        this.log.info('input', `Download concluído: ${file.name} (${U.fmtBytes(file.size)})`);
+        this.emit('osd', 'Download concluído');
+        this.emit('meta', item);
+        return true;
+      } catch (e) {
+        this.emit('ffmpeg-progress', null);
+        if (e.name === 'AbortError') { this.emit('osd', 'Download cancelado'); return false; }
+        const quota = e.name === 'QuotaExceededError' ? ' (sem espaço no armazenamento do navegador)' : '';
+        this.emit('error', 'Falha ao baixar o arquivo: ' + (e.message || e) + quota);
+        return false;
+      } finally { this._dl = null; }
+    }
+
+    /** Cancela download e conversão em andamento. */
+    cancelTasks() {
+      if (this._dl) this._dl.abort();
+      this.ffmpeg.cancel();
+      this.emit('ffmpeg-progress', null);
+    }
+
+    /**
+     * Verifica um item de rede: CORS, Range, tamanho, nome real e — quando o servidor permite —
+     * lê os metadados (faixas de áudio com idioma/codec, legendas, capítulos) por pedidos parciais.
+     */
+    inspectRemote(item) {
+      if (!item || !item.url || item.stream) return Promise.resolve();
+      if (item._remoteP) return item._remoteP;
+      const url = item.url;
+      if (!/^https?:/i.test(url) || isHls(url) || isDash(url) || /\.(m3u8|mpd)$/i.test(U.urlFileName(url))) return Promise.resolve();
+      item._remoteP = (async () => {
+        const r = await VW.remote.probe(url);
+        item.remote = { cors: r.cors, range: r.range, size: r.size, type: r.type, status: r.status, error: r.error };
+        // nome real do arquivo (Content-Disposition) — só quando a própria URL não traz um nome com extensão
+        // (o "filename=" da URL costuma ter os acentos corretos; o cabeçalho às vezes vem só em ASCII)
+        if (r.name && !U.ext(U.urlFileName(url)) && r.name !== item.remoteName) {
+          item.remoteName = r.name;
+          if (item.autoTitle) { item.title = U.stripExt(r.name) || item.title; this.emit('meta', item); }
+        }
+        this.log.info('input', `Servidor: ${r.cors ? 'permite leitura pela página (CORS)' : 'não permite leitura pela página (sem CORS) — modo de compatibilidade'}` +
+          (r.cors ? `, ${r.range ? 'aceita pedidos parciais (Range)' : 'sem pedidos parciais'}` : '') + (isFinite(r.size) ? ', ' + U.fmtBytes(r.size) : '') + (r.status >= 400 ? ', HTTP ' + r.status : ''));
+        if (r.cors && r.status < 400 && !item.info && !item.file) {
+          try {
+            const rf = new VW.remote.RemoteFile(url, Object.assign({}, r, { name: item.remoteName || U.urlFileName(url) }));
+            const info = await VW.metadata.read(rf);
+            if (rf.sizeKnown) item.remote.size = rf.size;
+            if (info.container || info.tracks.length) this.applyInfo(item, info);
+          } catch (e) { this.log.debug('input', 'Metadados remotos indisponíveis: ' + e.message); }
+        }
+        if (item === this.item) this.emit('tracks');
+      })().catch(e => { this.log.debug('input', 'Verificação do servidor falhou: ' + e.message); });
+      return item._remoteP;
     }
 
     cycleAudioTrack() {
@@ -812,25 +1031,37 @@
     }
 
     /* ---------- áudio externo sincronizado ("Reproduzir outra mídia em sincronia") ---------- */
-    startSlave(src) {
+    startSlave(src, kind = 'extra') {
       this.stopSlave();
-      const a = new Audio();
-      a.preload = 'auto';
+      // um elemento reaproveitado por rota: ligado ao motor de efeitos (equalizador etc.) ou saída direta
+      // (um elemento ligado ao Web Audio não pode ser desligado, então não se cria um novo a cada troca)
+      const direct = !!this.directAudio;
+      let a = direct ? this._slaveDirect : this._slaveEngine;
+      if (!a) {
+        a = new Audio();
+        a.preload = 'auto';
+        if (direct) this._slaveDirect = a; else { this._slaveEngine = a; this.audio.attach(a); }
+      }
       a.src = src instanceof Blob ? (this._slaveURL = URL.createObjectURL(src)) : src;
       this.slave = a;
-      this.audio.attach(a);
+      this.slaveKind = kind;
+      if (direct) a.volume = Math.min(1, this.audio.volume);
       this.applySourceGain();
       a.playbackRate = this.rate;
-      a.currentTime = this.currentTime;
-      if (!this.media.paused) a.play().catch(() => {});
-      this.emit('osd', 'Áudio externo ativado');
+      a.preservesPitch = this.media.preservesPitch !== false;
+      const sync = () => { try { a.currentTime = this.currentTime; } catch (e) { /* ok */ } if (!this.media.paused) a.play().catch(() => {}); };
+      a.addEventListener('loadedmetadata', sync, { once: true });
+      sync();
+      if (kind === 'extra') this.emit('osd', 'Áudio externo ativado');
       this.emit('tracks');
     }
     stopSlave() {
       if (!this.slave) return;
       this.slave.pause();
       this.slave.removeAttribute('src');
+      try { this.slave.load(); } catch (e) { /* ok */ }
       this.slave = null;
+      this.slaveKind = null;
       if (this._slaveURL) { URL.revokeObjectURL(this._slaveURL); this._slaveURL = null; }
       this.applySourceGain();
       this.emit('tracks');
@@ -925,19 +1156,22 @@
       if (!item.file || item.info || item._metaPending) return;
       item._metaPending = true;
       try {
-        const info = await VW.metadata.read(item.file);
-        item.info = info;
-        for (const k in info.tags) if (info.tags[k] && !item.meta[k]) item.meta[k] = info.tags[k];
-        if (!isFinite(item.duration) && isFinite(info.duration)) item.duration = info.duration;
-        if (info.cover && !item.coverURL) item.coverURL = URL.createObjectURL(info.cover);
-        const rec = this.recent.find(r => r.key === item.key);
-        if (rec && item.meta.title && rec.title !== item.displayTitle) { rec.title = item.displayTitle; U.store.set('recent', this.recent); this.emit('recent'); }
-        this.emit('meta', item);
-        if (item === this.item) {
-          this.applyChapters(item); this.updateMediaSession(); this.emit('tracks');
-          if (this.state === 'playing' || this.state === 'paused') this.checkAudioCodec(item);
-        }
+        this.applyInfo(item, await VW.metadata.read(item.file));
       } finally { item._metaPending = false; }
+    }
+
+    applyInfo(item, info) {
+      item.info = info;
+      for (const k in info.tags) if (info.tags[k] && !item.meta[k]) item.meta[k] = info.tags[k];
+      if (!isFinite(item.duration) && isFinite(info.duration)) item.duration = info.duration;
+      if (info.cover && !item.coverURL) item.coverURL = URL.createObjectURL(info.cover);
+      const rec = this.recent.find(r => r.key === item.key);
+      if (rec && rec.title !== item.displayTitle) { rec.title = item.displayTitle; U.store.set('recent', this.recent); this.emit('recent'); }
+      this.emit('meta', item);
+      if (item === this.item) {
+        this.applyChapters(item); this.updateMediaSession(); this.emit('tracks');
+        this.checkAudioCodec(item);
+      }
     }
 
     /** Lê duração/tags dos itens da lista em segundo plano. */
@@ -1012,8 +1246,22 @@
       const t = this.media.currentTime || 0;
       this.subs.update(t);
       if (this.ab.a !== null && this.ab.b !== null && t >= this.ab.b) this.seek(this.ab.a);
-      if (this.slave && !this.media.paused && Math.abs(this.slave.currentTime - t) > 0.3) this.slave.currentTime = t;
+      if (this.slave && !this.media.paused) this.syncSlave(t);
       if (!this.media.paused) this.emit('frame', t);
+    }
+
+    /** Mantém o áudio sincronizado colado ao vídeo: salto se a diferença for grande, ajuste fino de velocidade se pequena. */
+    syncSlave(t) {
+      const s = this.slave, m = this.media;
+      if (s.readyState < 2) return;
+      const now = performance.now();
+      if (now - (this._syncT || 0) < 200) return;
+      this._syncT = now;
+      if (s.paused && this.state === 'playing' && m.readyState >= 3) { s.play().catch(() => {}); return; }
+      const d = s.currentTime - t, base = m.playbackRate || 1;
+      if (Math.abs(d) > 0.3) { s.currentTime = t; s.playbackRate = base; }
+      else if (Math.abs(d) > 0.04) s.playbackRate = base * (d > 0 ? 0.97 : 1.03);
+      else if (s.playbackRate !== base) s.playbackRate = base;
     }
 
     /** Fluxo de saída (vídeo processado + áudio) para gravação/transmissão. */
@@ -1036,8 +1284,22 @@
   function unsupportedAudioCodec(item) {
     const tracks = ((item.info && item.info.tracks) || []).filter(t => t.type === 'audio');
     if (!tracks.length) return null;
-    const t = tracks.find(x => x.default) || tracks[0];
-    const id = String(t.codecId || t.fourcc || '');
+    return trackUnsupported(tracks.find(x => x.default) || tracks[0]);
+  }
+
+  /** Índice da faixa marcada como padrão (a que o navegador toca). */
+  function defaultAudioIndex(list) { return Math.max(0, (list || []).findIndex(t => t.default)); }
+  /** Faixa que o próprio elemento de vídeo toca (a padrão, ou a escolhida na conversão pelo FFmpeg). */
+  function baseAudioIndex(item, list) { return item.playable && item.playableAudio != null ? item.playableAudio : defaultAudioIndex(list); }
+
+  /** Nome do formato se o navegador não decodifica esta faixa; null se decodifica (ou não se sabe). */
+  function trackUnsupported(t) {
+    if (!t) return null;
+    const id = String(t.codecId || t.fourcc || (t.codec && /^[a-z0-9_]+$/.test(t.codec) ? 'ff:' + t.codec : '') || '');
+    const ff = { 'ff:ac3': 'A_AC3', 'ff:eac3': 'A_EAC3', 'ff:dts': 'A_DTS', 'ff:truehd': 'A_TRUEHD', 'ff:mp2': 'A_MPEG/L2', 'ff:alac': 'A_ALAC' };
+    return codecIdUnsupported(ff[id] || (id.startsWith('ff:pcm') ? 'A_PCM' : id));
+  }
+  function codecIdUnsupported(id) {
     const can = mime => !!(mime && document.createElement('audio').canPlayType(mime));
     const rules = [
       [/^A_AC3|^ac-3$/i, 'Dolby Digital (AC‑3)', 'audio/mp4; codecs="ac-3"'],
@@ -1053,13 +1315,18 @@
     return null;
   }
 
+  /** "Faixa 2 — Inglês [eng] — Comentários — E‑AC‑3 5.1" */
   function trackLabel(t, i) {
+    t = t || {};
     const parts = [];
-    if (t.name) parts.push(t.name);
-    if (t.lang) parts.push('[' + t.lang + ']');
-    if (t.codec) parts.push(t.codec);
-    if (t.channels) parts.push(typeof t.channels === 'number' ? t.channels + ' canais' : t.channels);
-    return `Faixa ${i + 1}` + (parts.length ? ' — ' + parts.join(' ') : '');
+    const lang = U.langName(t.lang);
+    if (lang) parts.push(lang + (t.lang && lang.toLowerCase() !== String(t.lang).toLowerCase() ? ` [${t.lang}]` : ''));
+    const name = String(t.name || '').trim();
+    if (name && (!lang || name.toLowerCase() !== lang.toLowerCase()) && !/^(sound|audio|áudio)handler$/i.test(name)) parts.push(name);
+    const tech = [U.codecName(t.codec), U.channelsLabel(t.channels)].filter(Boolean).join(' ');
+    if (tech) parts.push(tech);
+    if (!lang && !name) parts.unshift('idioma não informado');
+    return `Faixa ${i + 1} — ` + parts.join(' — ');
   }
 
   function isHls(url) { return /\.m3u8(\?|#|$)/i.test(url) || /[?&](format|type)=m3u8/i.test(url) || /\/manifest\(format=m3u8/i.test(url); }

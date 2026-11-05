@@ -400,6 +400,13 @@
     S_TEXT_UTF8: 'SubRip (SRT)', S_TEXT_ASS: 'ASS', S_TEXT_SSA: 'SSA', S_ASS: 'ASS', S_SSA: 'SSA', S_TEXT_WEBVTT: 'WebVTT', S_HDMV_PGS: 'PGS (imagem)',
     S_VOBSUB: 'VobSub (imagem)', S_DVBSUB: 'DVB (imagem)', D_WEBVTT_SUBTITLES: 'WebVTT'
   };
+  /** Os IDs reais usam "/" (V_MPEG4/ISO/AVC, A_MPEG/L3, A_AAC/MPEG2/LC/SBR…) */
+  function mkvCodecName(id) {
+    const k = String(id || '').replace(/\//g, '_');
+    if (MKV_CODECS[id] || MKV_CODECS[k]) return MKV_CODECS[id] || MKV_CODECS[k];
+    const pre = Object.keys(MKV_CODECS).filter(x => k.startsWith(x + '_')).sort((a, b) => b.length - a.length)[0];
+    return pre ? MKV_CODECS[pre] : id;
+  }
 
   function vint(b, p, isId) {
     const first = b[p];
@@ -457,7 +464,7 @@
       ebmlEach(b, ds, de, (tid, ts, te) => {
         if (tid === EBML_IDS.TRACKNUM) tr.number = ebmlUint(b, ts, te);
         else if (tid === EBML_IDS.TRACKTYPE) { const t = ebmlUint(b, ts, te); tr.type = t === 1 ? 'video' : t === 2 ? 'audio' : t === 17 ? 'subtitle' : 'other'; }
-        else if (tid === EBML_IDS.CODECID) { tr.codecId = latin1.decode(b.subarray(ts, te)).replace(/\0/g, ''); tr.codec = MKV_CODECS[tr.codecId] || tr.codecId; }
+        else if (tid === EBML_IDS.CODECID) { tr.codecId = latin1.decode(b.subarray(ts, te)).replace(/\0/g, ''); tr.codec = mkvCodecName(tr.codecId); }
         else if (tid === EBML_IDS.LANG) { const l = latin1.decode(b.subarray(ts, te)).replace(/\0/g, ''); if (!tr.lang && l !== 'und') tr.lang = l; }
         else if (tid === EBML_IDS.LANGBCP) { const l = latin1.decode(b.subarray(ts, te)).replace(/\0/g, ''); if (l !== 'und') tr.lang = l; }
         else if (tid === EBML_IDS.NAME) tr.name = utf8.decode(b.subarray(ts, te));

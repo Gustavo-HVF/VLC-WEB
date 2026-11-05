@@ -227,6 +227,36 @@
       return { blob, mime, probe, audioIndex: ai, subtitles };
     }
 
+    /**
+     * Extrai uma única faixa de áudio (para tocar em sincronia com o vídeo original).
+     * Copia sem perdas quando o navegador decodifica o codec; senão converte para AAC estéreo.
+     * Bem mais leve que remultiplexar o vídeo inteiro (a saída tem só o áudio).
+     */
+    async extractAudio(file, opts = {}) {
+      const onProgress = opts.onProgress || (() => {});
+      onProgress(0, 'Analisando…');
+      const probe = opts.probe || await this.probe(file);
+      const audios = probe.streams.filter(s => s.type === 'audio');
+      if (!audios.length) throw new Error('o arquivo não tem faixas de áudio');
+      const ai = U.clamp(opts.audioIndex ?? Math.max(0, audios.findIndex(s => s.default)), 0, audios.length - 1);
+      const a = audios[ai];
+      const test = document.createElement('audio');
+      const can = t => !!test.canPlayType(t);
+      let ext, mime, aArgs, what;
+      if (a.codec === 'aac' && can('audio/mp4; codecs="mp4a.40.2"')) { ext = 'm4a'; mime = 'audio/mp4'; aArgs = ['-c:a', 'copy']; }
+      else if (a.codec === 'mp3' && can('audio/mpeg')) { ext = 'mp3'; mime = 'audio/mpeg'; aArgs = ['-c:a', 'copy']; }
+      else if (a.codec === 'flac' && can('audio/flac')) { ext = 'flac'; mime = 'audio/flac'; aArgs = ['-c:a', 'copy']; }
+      else if ((a.codec === 'opus' || a.codec === 'vorbis') && can(`audio/webm; codecs="${a.codec}"`)) { ext = 'webm'; mime = 'audio/webm'; aArgs = ['-c:a', 'copy']; }
+      else { ext = 'm4a'; mime = 'audio/mp4'; aArgs = ['-c:a', 'aac', '-b:a', '192k', '-ac', '2']; what = a.codec.toUpperCase() + ' → AAC'; }
+      const label = what ? `Convertendo a faixa de áudio ${ai + 1} (${what})…` : `Extraindo a faixa de áudio ${ai + 1} (sem perdas)…`;
+      this.log.info('ffmpeg', `${file.name}: ${label}`);
+      onProgress(0, label);
+      const args = ['-map', `0:${a.index}`, '-vn', '-sn', '-dn', ...aArgs];
+      if (ext === 'm4a') args.push('-movflags', '+faststart');
+      const blob = await this.convert(file, { args, ext, mime, duration: probe.duration, onProgress: p => onProgress(p, label) });
+      return { blob, mime, probe, audioIndex: ai, stream: a, converted: !!what };
+    }
+
     /** Extrai faixas de legenda de texto embutidas (MKV/MP4) como arquivos SRT/ASS. */
     async extractSubtitles(file, probe) {
       probe = probe || await this.probe(file);
