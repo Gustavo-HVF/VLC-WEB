@@ -136,6 +136,13 @@ Também é preciso considerar que:
 - Chrome e Edge só trocam faixas de áudio de um vídeo em *streaming* com a opção `chrome://flags/#enable-experimental-web-platform-features` ativada. Sem ela, trocar a faixa de um link exige baixar o arquivo;
 - o decodificador FFmpeg baixa cerca de 31 MB na primeira vez e processa o arquivo na memória do navegador, então arquivos muito grandes (mais de ~1,5 GB) podem não caber.
 
+## Aplicativo Android
+
+A pasta [`android-app/`](android-app/README.md) transforma esta versão web num **APK para Android**, com Capacitor, sem duplicar o código.
+O GitHub Actions gera o APK automaticamente. Baixe a última versão em
+[Releases → VLC Web para Android](https://github.com/Gustavo-HVF/VLC-WEB/releases/download/android/VLC-Web.apk).
+O app funciona offline com arquivos do celular, e o botão Voltar, a tela cheia e o salvamento de arquivos foram adaptados ao Android.
+
 ## Estrutura
 
 ```
@@ -151,6 +158,8 @@ js/app.js               inicialização e integração
 assets/                 ícone do site (favicon, PWA, apple-touch) e logotipo
 vendor/                 hls.js (Apache-2.0), dash.js (BSD-3), carregador do ffmpeg.wasm (MIT)
 tools/serve.js          servidor local de desenvolvimento
+android-app/            aplicativo Android (Capacitor) gerado a partir desta versão web
+.github/workflows/      compilação automática do APK
 ```
 
 ## Licenças de terceiros

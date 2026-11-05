@@ -1,0 +1,107 @@
+# Gera o APK do VLC Web (pasta android-app/) a partir da versão web da raiz do repositório.
+# - Em qualquer envio: o APK fica disponível em "Actions" → execução → Artifacts.
+# - Na branch main: o APK também é publicado em Releases → "VLC Web para Android"
+#   (link fixo: https://github.com/<dono>/<repo>/releases/download/android/VLC-Web.apk).
+name: APK Android
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths:
+      - 'android-app/**'
+      - 'index.html'
+      - 'receiver.html'
+      - 'manifest.webmanifest'
+      - 'favicon.ico'
+      - 'assets/**'
+      - 'css/**'
+      - 'js/**'
+      - 'vendor/**'
+      - '.github/workflows/android.yml'
+  pull_request:
+    paths:
+      - 'android-app/**'
+      - 'index.html'
+      - 'receiver.html'
+      - 'manifest.webmanifest'
+      - 'favicon.ico'
+      - 'assets/**'
+      - 'css/**'
+      - 'js/**'
+      - 'vendor/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: Gerar APK
+    runs-on: ubuntu-latest
+    env:
+      # opcional: chave de assinatura própria (Settings → Secrets → Actions)
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+    defaults:
+      run:
+        working-directory: android-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: android-app/package-lock.json
+
+      - name: Instalar o Capacitor
+        run: npm ci
+
+      - name: Copiar a versão web para o app
+        run: npm run sync
+
+      - name: Usar a chave de assinatura própria
+        if: env.KEYSTORE_B64 != ''
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          echo "VLCWEB_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+
+      - name: Compilar o APK
+        working-directory: android-app/android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VLCWEB_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          VLCWEB_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          VLCWEB_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Preparar o arquivo
+        run: cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/VLC-Web.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VLC-Web-apk
+          path: ${{ runner.temp }}/VLC-Web.apk
+          if-no-files-found: error
+
+      - name: Publicar em Releases (somente main)
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete android --yes --cleanup-tag || true
+          gh release create android "$RUNNER_TEMP/VLC-Web.apk" \
+            --target "${{ github.sha }}" \
+            --title "VLC Web para Android (versão 1.0.${{ github.run_number }})" \
+            --notes "APK gerado automaticamente a partir da versão web (commit ${{ github.sha }}). Para instalar: baixe VLC-Web.apk no celular, abra o arquivo e permita a instalação de apps desta fonte. Cada versão nova instala por cima da anterior."

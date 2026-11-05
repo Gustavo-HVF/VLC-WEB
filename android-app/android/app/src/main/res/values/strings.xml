@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">VLC Web</string>
+    <string name="title_activity_main">VLC Web</string>
+    <string name="package_name">io.github.gustavohvf.vlcweb</string>
+    <string name="custom_url_scheme">io.github.gustavohvf.vlcweb</string>
+</resources>

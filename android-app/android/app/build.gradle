@@ -1,0 +1,74 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace = "io.github.gustavohvf.vlcweb"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "io.github.gustavohvf.vlcweb"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        // número da versão vem do GitHub Actions (VERSION_CODE = número da execução); cada APK novo instala por cima do anterior
+        versionCode((System.getenv('VERSION_CODE') ?: '1') as Integer)
+        versionName "1.0." + (System.getenv('VERSION_CODE') ?: '1')
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    // Assinatura: por padrão usa a chave de teste deste repositório (pública — serve para instalar e atualizar o app
+    // no próprio celular). Para publicar, defina VLCWEB_KEYSTORE / VLCWEB_KEYSTORE_PASSWORD / VLCWEB_KEY_ALIAS / VLCWEB_KEY_PASSWORD.
+    signingConfigs {
+        shared {
+            def ks = System.getenv('VLCWEB_KEYSTORE')
+            storeFile ks ? file(ks) : file('vlcweb-debug.keystore')
+            storePassword System.getenv('VLCWEB_KEYSTORE_PASSWORD') ?: 'android'
+            keyAlias System.getenv('VLCWEB_KEY_ALIAS') ?: 'vlcweb'
+            keyPassword System.getenv('VLCWEB_KEY_PASSWORD') ?: (System.getenv('VLCWEB_KEYSTORE_PASSWORD') ?: 'android')
+        }
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.shared
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.shared
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

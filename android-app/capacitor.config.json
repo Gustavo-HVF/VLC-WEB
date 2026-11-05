@@ -1,0 +1,12 @@
+{
+  "appId": "io.github.gustavohvf.vlcweb",
+  "appName": "VLC Web",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#1e1f22"
+  }
+}

@@ -168,7 +168,8 @@
     const reader = res.body.getReader();
     let loaded = 0, last = 0;
     const report = () => { const now = performance.now(); if (now - last > 200) { last = now; opts.onProgress && opts.onProgress(loaded, total); } };
-    const dir = await opfsDir();
+    // OPFS com escrita em fluxo (Safari e alguns WebViews não têm createWritable na página)
+    const dir = (typeof FileSystemFileHandle !== 'undefined' && 'createWritable' in FileSystemFileHandle.prototype) ? await opfsDir() : null;
     if (dir) {
       // nome interno simples: alguns nomes reais ("…", acentos, nomes longos) são recusados pelo OPFS
       const fname = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8) + (U.ext(name) ? '.' + U.ext(name).replace(/[^a-z0-9]/gi, '').slice(0, 8) : '');

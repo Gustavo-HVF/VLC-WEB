@@ -1,0 +1,23 @@
+{
+  "name": "vlc-web-android",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VLC Web empacotado como aplicativo Android (Capacitor). O site continua na raiz do repositório; esta pasta só gera o APK.",
+  "scripts": {
+    "copy-web": "node scripts/copy-web.js",
+    "sync": "npm run copy-web && cap sync android",
+    "apk": "npm run sync && cd android && ./gradlew assembleDebug",
+    "open": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor-community/keep-awake": "8.0.1",
+    "@capacitor/android": "8.6.0",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.6.0",
+    "@capacitor/filesystem": "8.1.5",
+    "@capacitor/share": "8.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.0"
+  }
+}

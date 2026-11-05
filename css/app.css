@@ -92,7 +92,10 @@ kbd { font-family: inherit; font-size: 11px; background: var(--panel2); border: 
 h1, h2, h3 { font-family: var(--heading-font); }
 
 /* ======================= Estrutura ======================= */
-.app { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; height: 100vh; height: 100dvh; position: relative; z-index: 1; outline: none; }
+.app { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; height: 100vh; height: 100dvh; position: relative; z-index: 1; outline: none; box-sizing: border-box;
+  /* celulares com entalhe/barras do sistema por cima (viewport-fit=cover); no app Android o Capacitor fornece --safe-area-inset-* */
+  padding: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px)) max(env(safe-area-inset-right, 0px), var(--safe-area-inset-right, 0px)) max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px)) max(env(safe-area-inset-left, 0px), var(--safe-area-inset-left, 0px)); }
+.app:fullscreen { padding: 0; }
 .main { display: flex; min-height: 0; position: relative; grid-row: 2; }
 .menubar { grid-row: 1; }
 .controls { grid-row: 3; }
