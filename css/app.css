@@ -495,6 +495,11 @@ textarea.f-text { resize: vertical; font-family: inherit; }
 .toast > span { flex: 1; line-height: 1.45; }
 .toast > .ico { color: var(--danger); margin-top: 1px; }
 .toast.hide { opacity: 0; transform: translateX(20px); }
+.toast.info { border-left-color: var(--accent); }
+.toast.info > .ico { color: var(--accent); }
+.toast-body { flex: 1; display: flex; flex-direction: column; gap: 8px; line-height: 1.45; }
+.toast-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.status-res { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
 @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } }
 .ff-toast { position: fixed; left: 16px; bottom: 96px; width: min(380px, calc(100vw - 32px)); z-index: 9000; background: var(--win-bg); color: var(--text); -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass); border: 1px solid var(--border); border-radius: var(--radius-win); padding: 10px 12px 12px; box-shadow: var(--shadow); }
 .ff-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px; }

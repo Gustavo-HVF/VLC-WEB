@@ -276,6 +276,14 @@ void main() { gl_FragColor = texture2D(uTex, vec2(vUv.x, 1.0 - vUv.y)); }`;
       this.hidden = true;
       this.fps = 0;
       this.cssMode = false;
+      this.tainted = false;
+      // desempenho: resolução máxima de processamento e exibição direta (sem WebGL) quando não há efeitos
+      this.maxRes = 'auto';        // 'auto' (tamanho da tela) | 'original' | altura máxima: '2160' '1440' '1080' '720' '480' '360'
+      this.directIdle = true;
+      this.direct = false;         // exibindo o <video> diretamente (sem efeitos)
+      this.natW = 0; this.natH = 0;
+      this.newFrame = true; this.lastFrameCb = 0;
+      this.loopFps = 60; this._loopT = 0; this._loopN = 0;
       if (!this.initGL()) this.mode = 'css';
       this.overlayCanvas = document.createElement('canvas');
       this.ro = new ResizeObserver(() => this.layout());
@@ -364,16 +372,51 @@ void main() { gl_FragColor = texture2D(uTex, vec2(vUv.x, 1.0 - vUv.y)); }`;
       this.dirty = true;
       this.overlayDirty = true;
       this.iz = { scale: 1, cx: 0.5, cy: 0.5 };
-      this.cssMode = this.mode === 'css';
-      this.updateDisplayMode();
-      this.layout();
+      this.tainted = false;
+      this.newFrame = true;
+      this.updateMode(true);
       if (el && el.tagName === 'VIDEO' && U.supports.rvfc) this._watchFrames(el);
     }
 
     setTainted(t) {
-      this.cssMode = t || this.mode === 'css';
+      this.tainted = !!t;
+      this.updateMode(true);
+    }
+
+    /** Algum efeito que só o WebGL faz está ativo? (sem nenhum, o vídeo pode ser exibido diretamente) */
+    needsGL() {
+      const p = this.p;
+      if (p.adjust || p.sharpen || p.deband || p.grain || p.extract || p.threshold || p.sepia || p.posterize || p.negate || p.gradient ||
+        p.transform || (p.rotate && p.rotateAngle) || p.izoom || p.wall || p.clone || p.puzzle || p.mirror || p.anaglyph || p.motionBlur ||
+        p.spatialBlur || p.waves || p.ripple || p.psychedelic || p.denoise || p.motionDetect || p.ascii || (p.deinterlace && p.deinterlace !== 'off') ||
+        p.logo || p.marquee || p.cropTop || p.cropBottom || p.cropLeft || p.cropRight) return true;
+      // corte da proporção: no modo direto depende de object-view-box
+      if (this.view.crop !== 'default' && !(window.CSS && CSS.supports && CSS.supports('object-view-box', 'inset(0% 0% 0% 0%)'))) return true;
+      return false;
+    }
+
+    /** Decide entre WebGL e exibição direta do elemento de vídeo. */
+    updateMode(force) {
+      const src = this.source;
+      const direct = !this.tainted && this.mode !== 'css' && this.directIdle && !!src && src.tagName === 'VIDEO' && !this.needsGL();
+      const css = this.mode === 'css' || this.tainted || direct;
+      if (!force && css === this.cssMode && direct === this.direct) return;
+      const was = this.cssMode;
+      this.cssMode = css;
+      this.direct = direct;
+      if (was && !css && src && src.style) { src.style.filter = ''; src.style.transform = ''; }
+      this.dirty = true;
       this.updateDisplayMode();
       this.layout();
+      if (was !== css) this.emit('mode', { css, direct });
+    }
+
+    setDirectIdle(on) { this.directIdle = !!on; this.updateMode(); }
+    setMaxRes(v) { this.maxRes = String(v || 'auto'); this.layout(); this.emit('resolution', this.resolutionInfo()); }
+
+    /** Resolução original × resolução de processamento (para a barra de status e as informações). */
+    resolutionInfo() {
+      return { srcW: this.srcW, srcH: this.srcH, outW: this.cssMode ? this.srcW : this.outW, outH: this.cssMode ? this.srcH : this.outH, direct: this.direct, css: this.cssMode, capped: !this.cssMode && this.outH < this.natH - 1, maxRes: this.maxRes };
     }
 
     _watchFrames(el) {
@@ -386,6 +429,8 @@ void main() { gl_FragColor = texture2D(uTex, vec2(vUv.x, 1.0 - vUv.y)); }`;
         }
         last = meta;
         this.frameMeta = meta;
+        this.newFrame = true;
+        this.lastFrameCb = performance.now();
         el.requestVideoFrameCallback(cb);
       };
       el.requestVideoFrameCallback(cb);
@@ -413,6 +458,7 @@ void main() { gl_FragColor = texture2D(uTex, vec2(vUv.x, 1.0 - vUv.y)); }`;
       if (key.startsWith('crop') || key.startsWith('transform') || key === 'ascii') this.layout();
       if (key === 'deinterlace' || key === 'izoom') this.emit('change');
       this.dirty = true;
+      this.updateMode();
       this.applyCss();
       this.emit('params', key, value, old);
       this.updateMiniMap();
@@ -427,7 +473,7 @@ void main() { gl_FragColor = texture2D(uTex, vec2(vUv.x, 1.0 - vUv.y)); }`;
       this.layout(); this.applyCss();
       this.emit('params', '*');
     }
-    setView(patch) { Object.assign(this.view, patch); this.layout(); this.dirty = true; this.emit('view', this.view); }
+    setView(patch) { Object.assign(this.view, patch); this.updateMode(); this.layout(); this.dirty = true; this.emit('view', this.view); }
 
     setLogo(img) { this.logoImg = img; this.overlayDirty = true; this.dirty = true; }
 
@@ -499,7 +545,6 @@ void main() { gl_FragColor = texture2D(uTex, vec2(vUv.x, 1.0 - vUv.y)); }`;
       let outH = Math.round(rot ? c.cw : c.ch), outW = Math.round(outH * dar);
       const maxDim = 3840;
       if (Math.max(outW, outH) > maxDim) { const k = maxDim / Math.max(outW, outH); outW = Math.round(outW * k); outH = Math.round(outH * k); }
-      this.outW = Math.max(2, outW); this.outH = Math.max(2, outH);
       let dw, dh;
       if (this.view.zoom === 'fit') {
         if (W / H > dar) { dh = H; dw = H * dar; } else { dw = W; dh = W / dar; }
@@ -507,6 +552,24 @@ void main() { gl_FragColor = texture2D(uTex, vec2(vUv.x, 1.0 - vUv.y)); }`;
         const z = +this.view.zoom || 1;
         dh = (rot ? c.cw : c.ch) * z; dw = dh * dar;
       }
+      this.natW = outW; this.natH = outH;
+      // resolução de processamento: sem sentido processar 4K para exibir numa janela pequena
+      if (!this._fullRes) {
+        let k = 1;
+        if (this.maxRes === 'auto') {
+          const dpr = Math.min(window.devicePixelRatio || 1, 2);
+          k = Math.min(1, (dw * dpr) / outW);
+          k = Math.max(k, Math.min(1, 360 / Math.min(outW, outH)));   // nunca abaixo de 360p
+        } else if (+this.maxRes > 0) {
+          const short = Math.min(outW, outH);
+          if (short > +this.maxRes) k = +this.maxRes / short;
+        }
+        if (k < 0.98) {
+          outW = Math.round(outW * k / 2) * 2; outH = Math.round(outH * k / 2) * 2;
+          if (this.maxRes === 'auto') { outW = Math.ceil(outW / 16) * 16; outH = Math.max(2, Math.round(outW / (this.natW / this.natH) / 2) * 2); }
+        }
+      }
+      this.outW = Math.max(2, Math.min(outW, this.natW || outW)); this.outH = Math.max(2, Math.min(outH, this.natH || outH));
       const x = (W - dw) / 2, y = (H - dh) / 2;
       this.cssRect = { x, y, w: dw, h: dh };
       const cs = this.canvas.style;
@@ -521,6 +584,8 @@ void main() { gl_FragColor = texture2D(uTex, vec2(vUv.x, 1.0 - vUv.y)); }`;
       this.updateDisplayMode();
       this.dirty = true;
       this.emit('layout', this.displayRect);
+      const key = this.outW + 'x' + this.outH + (this.cssMode ? 'c' : '');
+      if (key !== this._resKey) { this._resKey = key; this.emit('resolution', this.resolutionInfo()); }
     }
 
     /** Modo de compatibilidade (vídeo de outra origem sem CORS): filtros via CSS. */
@@ -736,22 +801,32 @@ void main() { gl_FragColor = texture2D(uTex, vec2(vUv.x, 1.0 - vUv.y)); }`;
       this.dirty = false;
     }
 
-    _loop() {
+    _loop(now) {
       requestAnimationFrame(this._loop);
+      // taxa de atualização da página (detecção de travamentos)
+      this._loopN++;
+      if (now - this._loopT >= 1000) { if (this._loopT) this.loopFps = this._loopN * 1000 / (now - this._loopT); this._loopT = now; this._loopN = 0; }
       if (!this.source || this.cssMode || this.hidden || !this.hasVideo) return;
       const s = this.source;
       const playing = s.tagName === 'VIDEO' && !s.paused && !s.ended;
       const p = this.p;
       const animated = p.waves || p.ripple || p.psychedelic || p.grain || p.deinterlace === 'bob' || p.motionBlur || p.denoise || this.marqueeDynamic || (p.marquee && p.marqueeTimeout > 0 && !this._marqueeExpired);
-      if (this.dirty || playing || animated) this.draw();
+      // só desenha quando há um quadro novo (um vídeo de 24 qps numa tela de 60 Hz não precisa de 60 envios por segundo)
+      const frameReady = this.newFrame || !U.supports.rvfc || s.tagName !== 'VIDEO' || now - this.lastFrameCb > 250;
+      if (this.dirty || animated || (playing && frameReady)) { this.newFrame = false; this.draw(); }
     }
 
     /* ---------------- captura ---------------- */
     async snapshot(type = 'image/png', quality = 0.92) {
       if (!this.hasVideo) throw new Error('Nenhum vídeo em reprodução');
       if (!this.cssMode) {
+        // a captura usa a resolução original, mesmo com a resolução de processamento reduzida
+        const reduced = this.outW < this.natW - 1;
+        if (reduced) { this._fullRes = true; this.layout(); }
         this.draw();
-        return await new Promise((res, rej) => this.canvas.toBlob(b => b ? res(b) : rej(new Error('Falha ao gerar imagem')), type, quality));
+        const p = new Promise((res, rej) => this.canvas.toBlob(b => b ? res(b) : rej(new Error('Falha ao gerar imagem')), type, quality));
+        if (reduced) { this._fullRes = false; this.layout(); this.draw(); }
+        return await p;
       }
       const c = document.createElement('canvas');
       c.width = this.srcW; c.height = this.srcH;
