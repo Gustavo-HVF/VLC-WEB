@@ -55,6 +55,14 @@ Abrir o `index.html` direto do disco (`file://`) funciona para o básico, mas o 
 - **Captura de imagem** em PNG, JPEG ou WebP, com miniatura.
 - **Efeitos**: ajuste de imagem (matiz, brilho, contraste, saturação, gama), nitidez, remoção de faixas, granulação, corte por pixels, extração e limiar de cor, sépia, posterização, negativo, gradiente/bordas/cartoon, rotação livre, zoom interativo, parede, clone, **quebra-cabeça interativo**, espelho, anaglifo 3D, borrão de movimento, desfoque, ondas, ondulação, psicodélico, redução de ruído, detecção de movimento, **arte ASCII**, **logotipo** e **letreiro** com variáveis ($t, $T, %H:%M…).
 - Vídeos de outros sites sem CORS tocam em modo de compatibilidade, com os filtros básicos aplicados via CSS.
+- **Resolução máxima** (*Vídeo → Resolução*, `Alt+R`, ou *Preferências → Vídeo → Desempenho*) para vídeos 4K que travam:
+  - **Automática** (padrão): os efeitos nunca são processados acima do tamanho da janela. Um vídeo 4K numa janela de 1280 px é processado em ~1280×720, cerca de 9× menos pixels por quadro.
+  - **2160p a 360p**: limite fixo. Em fluxos **HLS/DASH**, também limita a qualidade baixada, o que reduz rede e decodificação.
+  - **Exibição direta**: sem efeitos ativos, o vídeo é mostrado direto pelo navegador, sem WebGL (o caminho mais leve). Ao ativar um efeito, a troca para WebGL é automática.
+  - Com efeitos, cada quadro só é processado quando há um quadro novo (24 qps em vez de 60).
+  - As capturas de imagem continuam na resolução original. A barra de status mostra quando a resolução está reduzida (ex.: `4K → 720p`).
+  - **Aviso de travamento**: detecta quadros descartados ou página lenta e sugere a correção (reduzir a resolução, desativar efeitos ou criar uma cópia mais leve).
+  - **Criar cópia em resolução menor**: converte com o FFmpeg. Num arquivo único, o navegador sempre decodifica a resolução original; essa conversão é lenta no navegador para vídeos 4K.
 
 ### Legendas
 - Formatos: **SRT, WebVTT, ASS/SSA, MicroDVD (SUB), SubViewer/SBV, MPL2, LRC (letras), SAMI e TTML/DFXP**, além das faixas embutidas (HLS e MKV/MP4 via FFmpeg).

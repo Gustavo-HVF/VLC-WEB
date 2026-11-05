@@ -104,7 +104,10 @@
       if (m && m.videoWidth) {
         const rows = [['Resolução decodificada', `${m.videoWidth}x${m.videoHeight}`], ['Resolução de saída', `${p.renderer.outW}x${p.renderer.outH}`]];
         if (p.renderer.fps) rows.push(['Taxa de quadros medida', p.renderer.fps.toFixed(3)]);
-        rows.push(['Saída de vídeo', p.renderer.cssMode ? 'Elemento de vídeo (modo de compatibilidade)' : 'WebGL']);
+        const R = p.renderer;
+        rows.push(['Saída de vídeo', R.tainted ? 'Elemento de vídeo (modo de compatibilidade)' : R.direct ? 'Elemento de vídeo (exibição direta, sem efeitos)' : 'WebGL']);
+        if (!R.cssMode && R.outW < R.natW - 1) rows.push(['Resolução de processamento', `${R.outW}x${R.outH} (limite: ${resLabel(app.settings.get('maxResolution'))})`]);
+        if (p.perfStats && p.perfStats.total) rows.push(['Quadros descartados', `${p.perfStats.dropped} de ${p.perfStats.total}`]);
         codec.appendChild(streamBox('Decodificação no navegador', rows));
       }
       if (p.hls && p.item === item) {
@@ -307,11 +310,14 @@
     return args;
   }
 
+  const resLabel = v => ({ auto: 'automática', original: 'original' }[v] || v + 'p');
+
   function convert(app, items, preset = {}) {
     const p = app.player;
     items = (items && items.length ? items : (p.item ? [p.item] : [])).filter(i => !i.stream);
     const w = new Win({ id: 'convert-' + Date.now(), title: 'Converter', width: 660, icon: 'convert', modal: true });
     const o = { profile: 'h264-mp3', engine: 'ffmpeg', crf: 23, vbitrate: 2500, abitrate: 192, samplerate: 0, channels: 0, height: 0, fps: 0, noAudio: false, noVideo: false, start: preset.start || 0, end: preset.end || 0 };
+    if (preset.height) o.height = +preset.height;
     const srcList = el('div', { class: 'file-list small' });
     const renderSrc = () => {
       srcList.textContent = '';
@@ -327,7 +333,7 @@
       dest.disabled = items.length !== 1;
     };
     const vBox = el('div', { class: 'grid2' },
-      F.row('Resolução:', F.select([['0', 'Original'], ['2160', '2160p (4K)'], ['1080', '1080p'], ['720', '720p'], ['480', '480p'], ['360', '360p'], ['240', '240p']], '0', v => { o.height = +v; })),
+      F.row('Resolução:', F.select([['0', 'Original'], ['2160', '2160p (4K)'], ['1080', '1080p'], ['720', '720p'], ['480', '480p'], ['360', '360p'], ['240', '240p']], String(o.height || 0), v => { o.height = +v; })),
       F.row('Taxa de quadros:', F.select([['0', 'Original'], ['60', '60'], ['30', '30'], ['25', '25'], ['24', '24'], ['15', '15'], ['10', '10']], '0', v => { o.fps = +v; })),
       F.row('Qualidade (CRF; menor = melhor):', F.slider({ min: 15, max: 40, step: 1, value: o.crf, onInput: v => { o.crf = v; } })),
       F.row('Taxa de bits de vídeo:', F.number(o.vbitrate, v => { o.vbitrate = v; }, { min: 100, max: 50000, step: 100 }), el('span', { class: 'muted' }, 'kb/s')),
@@ -337,7 +343,7 @@
       F.row('Taxa de amostragem:', F.select([['0', 'Original'], ['22050', '22050 Hz'], ['44100', '44100 Hz'], ['48000', '48000 Hz']], '0', v => { o.samplerate = +v; })),
       F.row('Canais:', F.select([['0', 'Original'], ['1', 'Mono'], ['2', 'Estéreo']], '0', v => { o.channels = +v; })),
       F.check('Sem áudio', false, v => { o.noAudio = v; }));
-    const profEdit = el('div', { class: 'profile-edit', hidden: true }, F.group('Codec de vídeo', vBox), F.group('Codec de áudio', aBox));
+    const profEdit = el('div', { class: 'profile-edit', hidden: !preset.height }, F.group('Codec de vídeo', vBox), F.group('Codec de áudio', aBox));
     const updateVis = () => { const pr = PROFILES.find(x => x.id === o.profile); vBox.hidden = !!(pr.audioOnly || pr.copy); aBox.hidden = !!(pr.copy || pr.gif); };
     updateVis();
     const engineRadio = F.radio('engine-' + w.id, [['ffmpeg', 'FFmpeg (rápido, converte o arquivo original)'], ['realtime', 'Tempo real (grava a reprodução com os efeitos de áudio e vídeo aplicados)']], o.engine, v => { o.engine = v; updateDest(); });
@@ -353,6 +359,7 @@
       F.group('Configurações', engineRadio,
         el('div', { class: 'btn-row' }, el('span', {}, 'Perfil:'), profSel, F.button('Editar perfil', () => { profEdit.hidden = !profEdit.hidden; }, 'small')),
         profEdit,
+        preset.height ? F.hint('Cria uma cópia mais leve do vídeo (menos trabalho para decodificar). A conversão roda no navegador, sem aceleração de hardware: para vídeos 4K ela é lenta e pode levar mais tempo que a duração do vídeo. Prefira usar em trechos (início/fim) ou deixar convertendo.', 'warn') : null,
         el('div', { class: 'grid2' },
           F.row('Início:', F.text(o.start ? U.fmtTimeMs(o.start) : '', v => { o.start = U.parseTime(v) || 0; }, { placeholder: '00:00:00' })),
           F.row('Fim:', F.text(o.end ? U.fmtTimeMs(o.end) : '', v => { o.end = U.parseTime(v) || 0; }, { placeholder: '(até o final)' })))),

@@ -54,6 +54,9 @@
     snapshotFormat: 'png',         // png | jpeg | webp
     snapshotPrefix: 'vlcsnap-',
     snapshotPreview: true,
+    maxResolution: 'auto',         // auto (tamanho da tela) | original | 2160 | 1440 | 1080 | 720 | 480 | 360
+    directVideo: true,             // exibe o vídeo direto (sem WebGL) quando não há efeitos — mais leve
+    lagHint: true,                 // avisa quando o vídeo trava e sugere reduzir a resolução
     deinterlace: 'off',            // off | on
     deinterlaceMode: 'blend',      // discard | blend | bob | linear
     titleOnStart: true,

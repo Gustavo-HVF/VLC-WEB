@@ -78,6 +78,7 @@
       def('add-folder', 'Adicionar pasta à lista…', () => this.quickOpenFolder(false), [], 'Mídia');
       def('save-playlist', 'Salvar lista de reprodução no arquivo…', () => this.dialogs.savePlaylist(), ['Ctrl+Y'], 'Mídia');
       def('convert', 'Converter / salvar…', () => this.dialogs.convert(), ['Ctrl+R'], 'Mídia');
+      def('resolution-cycle', 'Alternar a resolução máxima do vídeo', () => this.cycleMaxResolution(), ['Alt+R'], 'Vídeo');
       def('stream', 'Transmitir…', () => this.dialogs.stream(), ['Ctrl+S'], 'Mídia');
       def('quit', 'Sair', () => this.quit(), ['Ctrl+Q'], 'Mídia');
 
@@ -238,6 +239,16 @@
       };
       const stereoMenu = () => Object.entries(VW.AudioEngine.STEREO_MODES).map(([k, v]) => ({ label: v.name, radio: true, checked: p.audio.state.stereo === k, action: () => { p.audio.ensure(); p.audio.setStereoMode(k); this.controls.osd('Modo estéreo: ' + v.name); } }));
       const visMenu = () => Object.entries(VW.Visualizer.MODES).map(([k, v]) => ({ label: v, radio: true, checked: S.get('visualization') === k, action: () => S.set('visualization', k) }));
+      const resMenu = () => {
+        const cur = S.get('maxResolution'), R = p.renderer, it = p.item;
+        const list = [{ header: 'Resolução máxima' + (R.hasVideo ? ` (vídeo: ${R.srcW}×${R.srcH})` : '') }]
+          .concat(VW.App.RESOLUTIONS.map(([v, l]) => ({ label: l, radio: true, checked: cur === v, action: () => this.setMaxResolution(v) })));
+        list.push({ sep: true },
+          { label: 'Exibição direta quando não há efeitos (mais leve)', checked: S.get('directVideo'), action: () => S.set('directVideo', !S.get('directVideo')) },
+          { label: 'Criar cópia em resolução menor (FFmpeg)…', disabled: !(it && (it.file || it.url) && p.hasVideo), action: () => this.dialogs.convert([it], { height: +p.suggestedResolution() }) });
+        return list;
+      };
+      this.resMenu = resMenu;
       const videoTracks = () => {
         const q = p.getQualities();
         const list = [{ label: 'Desativar', radio: true, checked: !p.videoEnabled, action: () => p.setVideoEnabled(false) }, { label: 'Faixa 1', radio: true, checked: p.videoEnabled, disabled: !p.renderer.hasVideo, action: () => p.setVideoEnabled(true) }];
@@ -311,6 +322,7 @@
         ],
         video: () => [
           { label: 'Faixa de vídeo', submenu: videoTracks },
+          { label: 'Resolução', submenu: resMenu },
           { sep: true },
           { label: 'Tela cheia', icon: 'fullscreen', shortcut: 'fullscreen', checked: !!document.fullscreenElement, action: A('fullscreen') },
           { label: 'Sempre ajustar à janela', checked: R.view.zoom === 'fit', action: () => R.setView({ zoom: R.view.zoom === 'fit' ? '1' : 'fit' }) },
@@ -825,6 +837,27 @@
       p.on('ffmpeg-ask', (item, reason, soft) => this.askFFmpeg(item, reason, soft));
       p.on('download-ask', (item, opts, done) => this.askDownload(item, opts).then(done, () => done(false)));
       p.on('remote-help', (item, opts) => this.showRemoteHelp(item, opts));
+      p.on('perf-lag', info => this.showLagHint(info));
+      // indicador de resolução reduzida na barra de status
+      const S = this.settings;
+      const resBadge = U.$('#status-res');
+      const updateRes = () => {
+        const R = p.renderer, i = R.resolutionInfo(), cur = S.get('maxResolution');
+        let txt = '';
+        if (p.item && R.hasVideo) {
+          if (i.capped) txt = `${short(i.srcW, i.srcH)} → ${short(i.outW, i.outH)}`;
+          else if ((p.hls || p.dash) && p._capIndex != null && cur !== 'auto' && cur !== 'original') txt = `≤ ${cur}p`;
+        }
+        resBadge.hidden = !txt;
+        resBadge.textContent = txt;
+        resBadge.title = 'Resolução reduzida para aliviar a reprodução (Vídeo → Resolução). Clique para alterar.';
+      };
+      const short = (w, h) => { const s = Math.min(w, h); return s >= 2000 ? '4K' : s + 'p'; };
+      p.renderer.on('resolution', updateRes);
+      p.on('tracks', updateRes);
+      p.on('item', () => setTimeout(updateRes, 0));
+      S.on('change:maxResolution', updateRes);
+      resBadge.addEventListener('click', e => this.menu.context(this.resMenu(), e.clientX, e.clientY - 10));
       p.on('resume-ask', pos => this.showResume(pos));
       // o navegador bloqueou o motor de áudio: mostra o botão "Clique para ativar o som"
       const unlock = U.$('#audio-unlock');
@@ -871,6 +904,64 @@
         [['yes', soft ? 'Converter o áudio' : 'Converter e reproduzir'], ['no', soft ? 'Continuar assim' : 'Cancelar']], { extra: remember, icon: 'codec', width: 540 });
       if (remember.input.checked && ans === 'yes') this.settings.set('ffmpegMode', 'always');
       if (ans === 'yes') this.player.playWithFFmpeg(item, { audioOnly: soft });
+    }
+
+    /* ======================= Resolução / desempenho ======================= */
+    static get RESOLUTIONS() {
+      return [['auto', 'Automática (tamanho da janela)'], ['original', 'Original (sem limite)'], ['2160', '2160p (4K)'], ['1440', '1440p'], ['1080', '1080p (Full HD)'], ['720', '720p (HD)'], ['480', '480p'], ['360', '360p']];
+    }
+    setMaxResolution(v) {
+      const p = this.player, R = p.renderer;
+      this.settings.set('maxResolution', v);
+      const label = (VW.App.RESOLUTIONS.find(x => x[0] === v) || [v, v])[1];
+      this.controls.osd('Resolução máxima: ' + label);
+      // arquivo único já exibido no modo mais leve: o limite não reduz a decodificação — explica
+      const cap = +v;
+      if (cap > 0 && p.item && R.hasVideo && Math.min(R.srcW, R.srcH) > cap && R.direct && !p.hls && !p.dash && !this._resExplained) {
+        this._resExplained = true;
+        this.notify(`Este vídeo (${R.srcW}×${R.srcH}) já está sendo exibido do jeito mais leve possível, sem efeitos. O limite de ${cap}p reduz o processamento quando há efeitos de vídeo e a qualidade baixada em fluxos HLS/DASH, mas num arquivo único o navegador continua decodificando em ${Math.min(R.srcW, R.srcH)}p. Se ainda travar, crie uma cópia mais leve.`,
+          [['Criar cópia em ' + cap + 'p…', () => this.dialogs.convert([p.item], { height: cap })]], { timeout: 16000 });
+      }
+    }
+    cycleMaxResolution() {
+      const order = ['auto', '1080', '720', '480', 'original'];
+      const cur = this.settings.get('maxResolution');
+      this.setMaxResolution(order[(order.indexOf(cur) + 1) % order.length]);
+    }
+
+    /** O vídeo está travando: explica a causa provável e oferece a correção. */
+    showLagHint(info) {
+      const p = this.player, S = this.settings;
+      const next = p.suggestedResolution();
+      const size = `${info.srcW}×${info.srcH}`;
+      const acts = [];
+      let msg;
+      if (info.stream) {
+        msg = `O vídeo está travando (${size}). Limitar a qualidade do fluxo reduz os dados baixados e o trabalho de decodificação.`;
+        acts.push([`Limitar a ${next}p`, () => this.setMaxResolution(next)]);
+      } else if (info.effects) {
+        msg = `O vídeo está travando: os efeitos de vídeo estão sendo aplicados a cada quadro (vídeo ${size}, processado em ${info.outW}×${info.outH}). Reduzir a resolução de processamento ou desativar os efeitos alivia a placa de vídeo.`;
+        acts.push([`Reduzir para ${next}p`, () => this.setMaxResolution(next)]);
+        acts.push(['Desativar efeitos', () => { p.renderer.reset(); this.controls.osd('Efeitos de vídeo desativados'); }]);
+      } else {
+        msg = `O computador não está conseguindo decodificar este vídeo de ${size} a tempo. Como é um arquivo único, a solução é usar uma cópia em resolução menor.`;
+        if (p.item && (p.item.file || p.item.url)) acts.push([`Criar cópia em ${next}p…`, () => this.dialogs.convert([p.item], { height: +next })]);
+      }
+      acts.push(['Não avisar mais', () => S.set('lagHint', false)]);
+      this.notify(msg, acts, { timeout: 20000, icon: 'warning' });
+    }
+
+    /** Aviso com botões de ação (canto da tela). actions: [[rótulo, função], …] */
+    notify(msg, actions = [], opts = {}) {
+      const box = U.$('#toasts');
+      const close = () => { t.classList.add('hide'); setTimeout(() => t.remove(), 500); };
+      const btns = actions.map(([label, fn]) => el('button', { type: 'button', class: 'btn small', onclick: () => { close(); fn(); } }, label));
+      const t = el('div', { class: 'toast info', role: 'status' }, U.icon(opts.icon || 'info'),
+        el('div', { class: 'toast-body' }, el('span', {}, msg), btns.length ? el('div', { class: 'toast-actions' }, ...btns) : null),
+        el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Fechar', onclick: close }, U.icon('close')));
+      box.appendChild(t);
+      setTimeout(close, opts.timeout || 9000);
+      return t;
     }
 
     /** Pede confirmação para baixar um item de rede (trocar faixa de áudio / converter). */
@@ -978,6 +1069,7 @@
   }
 
   function viewLabel(k) { return { aspect: 'Proporção', crop: 'Corte', zoom: 'Zoom' }[k] || k; }
+  VW.App = App;
 
   window.addEventListener('DOMContentLoaded', () => {
     try { new App(); }

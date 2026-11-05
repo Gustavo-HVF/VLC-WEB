@@ -105,6 +105,13 @@
       this.settings.on('change:audioEnabled', () => this.applySourceGain());
       this.settings.on('change:videoEnabled', v => this.setVideoEnabled(v));
       this.settings.on('change:deinterlace', () => this.applyDeinterlace());
+      // desempenho: resolução máxima e exibição direta
+      this.renderer.setMaxRes(this.settings.get('maxResolution'));
+      this.renderer.setDirectIdle(this.settings.get('directVideo'));
+      this.settings.on('change:maxResolution', v => { this.renderer.setMaxRes(v); this.applyStreamCap(); this.emit('tracks'); });
+      this.settings.on('change:directVideo', v => this.renderer.setDirectIdle(v));
+      this.renderer.on('resolution', () => { if (this.settings.get('maxResolution') === 'auto') this.applyStreamCapSoon(); });
+      this._perfTimer = setInterval(() => this.checkPerformance(), 2000);
       this.settings.on('change:deinterlaceMode', () => this.applyDeinterlace());
       this.playlist.on('change', () => this.scheduleProbe());
       this.applyDeinterlace();
@@ -152,6 +159,7 @@
       this.item = item;
       this.restricted = false;
       this.audioTrackOff = false;
+      this._lagWarned = false; this._lagCount = 0; this._perf = null;
       this._audioBlocked = false;
       this.emit('audio-blocked', false);
       this.renderer.setTainted(false);
@@ -225,7 +233,7 @@
         const Hls = window.Hls;
         const hls = this.hls = new Hls({ maxBufferLength: this.settings.get('hlsMaxBuffer'), enableWorker: true });
         hls.subtitleDisplay = false;
-        hls.on(Hls.Events.MANIFEST_PARSED, () => { this.log.info('hls', `HLS: ${hls.levels.length} qualidades, ${hls.audioTracks.length} faixas de áudio`); this.emit('tracks'); });
+        hls.on(Hls.Events.MANIFEST_PARSED, () => { this.log.info('hls', `HLS: ${hls.levels.length} qualidades, ${hls.audioTracks.length} faixas de áudio`); this.applyStreamCap(); this.emit('tracks'); });
         for (const ev of [Hls.Events.AUDIO_TRACKS_UPDATED, Hls.Events.AUDIO_TRACK_SWITCHED, Hls.Events.LEVEL_SWITCHED, Hls.Events.SUBTITLE_TRACKS_UPDATED]) hls.on(ev, () => this.emit('tracks'));
         let recovered = 0;
         hls.on(Hls.Events.ERROR, (ev, data) => {
@@ -249,7 +257,7 @@
       const d = this.dash = window.dashjs.MediaPlayer().create();
       d.updateSettings({ debug: { logLevel: 1 } });
       d.on(window.dashjs.MediaPlayer.events.ERROR, e => { this.log.error('dash', JSON.stringify(e.error || e).slice(0, 200)); });
-      d.on(window.dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => this.emit('tracks'));
+      d.on(window.dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => { this.applyStreamCap(); this.emit('tracks'); });
       d.on(window.dashjs.MediaPlayer.events.QUALITY_CHANGE_RENDERED, () => this.emit('tracks'));
       d.initialize(this.media, url, false);
     }
@@ -998,7 +1006,7 @@
     getQualities() {
       if (this.hls && this.hls.levels.length > 1) {
         return [{ id: -1, label: 'Automática', active: this.hls.autoLevelEnabled }].concat(this.hls.levels.map((l, i) => ({
-          id: i, label: `${l.height ? l.height + 'p' : ''} ${U.fmtBitrate(l.bitrate)}`.trim(), active: !this.hls.autoLevelEnabled && this.hls.currentLevel === i
+          id: i, label: `${l.height ? l.height + 'p' : ''} ${U.fmtBitrate(l.bitrate)}`.trim() + (this._capIndex != null && i > this._capIndex ? ' (acima do limite de resolução)' : ''), active: !this.hls.autoLevelEnabled && this.hls.currentLevel === i
         })));
       }
       if (this.dash) {
@@ -1006,7 +1014,7 @@
         if (list.length > 1) {
           const auto = this.dash.getSettings().streaming.abr.autoSwitchBitrate.video;
           const cur = this.dash.getQualityFor('video');
-          return [{ id: -1, label: 'Automática', active: auto }].concat(list.map((l, i) => ({ id: i, label: `${l.height}p ${U.fmtBitrate(l.bitrate)}`, active: !auto && cur === i })));
+          return [{ id: -1, label: 'Automática', active: auto }].concat(list.map((l, i) => ({ id: i, label: `${l.height}p ${U.fmtBitrate(l.bitrate)}` + (this._capIndex != null && i > this._capIndex ? ' (acima do limite de resolução)' : ''), active: !auto && cur === i })));
         }
       }
       return [];
@@ -1262,6 +1270,80 @@
       if (Math.abs(d) > 0.3) { s.currentTime = t; s.playbackRate = base; }
       else if (Math.abs(d) > 0.04) s.playbackRate = base * (d > 0 ? 0.97 : 1.03);
       else if (s.playbackRate !== base) s.playbackRate = base;
+    }
+
+    /* ---------- desempenho: limite de resolução e detecção de travamentos ---------- */
+    /** Altura máxima desejada para fluxos adaptativos (HLS/DASH); null = sem limite. */
+    streamCapHeight() {
+      const v = this.settings.get('maxResolution');
+      if (+v > 0) return +v;
+      if (v !== 'auto') return null;
+      const r = this.renderer.cssRect || this.renderer.displayRect;
+      if (!r || !r.h) return null;
+      return Math.max(360, Math.round(r.h * Math.min(window.devicePixelRatio || 1, 2)));
+    }
+    applyStreamCapSoon() { clearTimeout(this._capT); this._capT = setTimeout(() => this.applyStreamCap(), 400); }
+
+    /** Limita a qualidade de HLS/DASH: menos dados baixados e menos trabalho para decodificar. */
+    applyStreamCap() {
+      const cap = this.streamCapHeight(), auto = this.settings.get('maxResolution') === 'auto';
+      // escolhe a última qualidade com altura <= limite (no modo automático, a menor que cobre a tela)
+      const pick = heights => {
+        if (cap == null || !heights.length) return null;
+        let idx = -1;
+        if (auto) { idx = heights.findIndex(h => h >= cap); if (idx < 0) return null; }
+        else heights.forEach((h, i) => { if (h && h <= cap) idx = i; });
+        return Math.max(0, idx);
+      };
+      if (this.hls && this.hls.levels && this.hls.levels.length) {
+        const order = this.hls.levels.map((l, i) => ({ h: l.height || 0, i })).sort((a, b) => a.h - b.h);
+        const k = pick(order.map(o => o.h));
+        const idx = k == null ? -1 : order[k].i;
+        // o hls.js limita pelo índice: garante que níveis acima do escolhido tenham índice maior
+        this.hls.autoLevelCapping = idx;
+        this._capIndex = idx < 0 ? null : idx;
+        if (idx >= 0 && !this.hls.autoLevelEnabled && this.hls.currentLevel > idx) this.hls.currentLevel = idx;
+        if (idx >= 0) this.log.info('hls', `Limite de resolução: até ${this.hls.levels[idx].height}p`);
+      } else if (this.dash && this.dash.getBitrateInfoListFor) {
+        const list = this.dash.getBitrateInfoListFor('video') || [];
+        const k = pick(list.map(l => l.height || 0));
+        this._capIndex = k;
+        const kbps = k == null ? -1 : Math.ceil(list[k].bitrate / 1000) + 1;
+        try { this.dash.updateSettings({ streaming: { abr: { maxBitrate: { video: kbps } } } }); } catch (e) { /* versão antiga */ }
+        if (k != null && this.dash.getQualityFor && this.dash.getQualityFor('video') > k) { try { this.dash.setQualityFor('video', k, true); } catch (e) { /* ok */ } }
+      } else this._capIndex = null;
+    }
+
+    /** Detecta travamentos (quadros descartados ou página lenta) e sugere reduzir a resolução. */
+    checkPerformance() {
+      const m = this.media, it = this.item;
+      if (!it || this.isImage || !this.hasVideo || m.paused || (this.state !== 'playing' && this.state !== 'buffering') || document.hidden) { this._perf = null; return; }
+      const q = m.getVideoPlaybackQuality ? m.getVideoPlaybackQuality() : null;
+      const cur = { dropped: q ? q.droppedVideoFrames : 0, total: q ? q.totalVideoFrames : 0, t: m.currentTime };
+      const prev = this._perf;
+      this._perf = cur;
+      if (!prev || cur.t <= prev.t) return;
+      const dTotal = cur.total - prev.total, dDrop = cur.dropped - prev.dropped;
+      const dropRatio = dTotal > 12 ? dDrop / dTotal : 0;
+      const slowPage = !this.renderer.cssMode && this.renderer.loopFps < 22;
+      const bad = dropRatio > 0.15 || slowPage;
+      this.perfStats = { dropRatio, loopFps: this.renderer.loopFps, slowPage, total: cur.total, dropped: cur.dropped };
+      this._lagCount = bad ? (this._lagCount || 0) + 1 : Math.max(0, (this._lagCount || 0) - 1);
+      if (this._lagCount >= 3 && !this._lagWarned && this.settings.get('lagHint')) {
+        this._lagWarned = true;
+        const r = this.renderer;
+        this.log.warn('video', `Reprodução travando: ${Math.round(dropRatio * 100)}% de quadros descartados, página a ${Math.round(r.loopFps)} qps (${r.srcW}×${r.srcH})`);
+        this.emit('perf-lag', { srcW: r.srcW, srcH: r.srcH, outW: r.outW, outH: r.outH, dropRatio, slowPage, effects: !r.cssMode, stream: !!(this.hls || this.dash), local: !!it.file });
+      }
+    }
+
+    /** Próximo degrau de resolução abaixo do vídeo atual (para a sugestão automática). */
+    suggestedResolution() {
+      const R = this.renderer;
+      // parte da resolução realmente processada (com efeitos) ou exibida/decodificada (sem efeitos)
+      const h = (R.cssMode ? Math.min(R.srcW, R.srcH) : Math.min(R.outW, R.outH)) || 0;
+      const step = [1080, 720, 480, 360].find(x => x <= h * 0.9);
+      return String(step || 360);
     }
 
     /** Fluxo de saída (vídeo processado + áudio) para gravação/transmissão. */
