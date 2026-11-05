@@ -6,7 +6,9 @@
   <meta name="description" content="VLC Web: reprodutor multimídia completo no navegador — lista de reprodução, legendas, equalizador, filtros de vídeo, captura, gravação, conversão e transmissão.">
   <meta name="theme-color" content="#1e1f22">
   <title>VLC Web — reprodutor de mídia</title>
-  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/icon-32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="assets/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="css/app.css">
   <link rel="stylesheet" href="css/skins.css">
@@ -98,7 +100,7 @@
         </div>
 
         <div id="welcome" class="welcome">
-          <img src="assets/icon.svg" alt="" class="welcome-logo" width="112" height="112">
+          <img src="assets/logo.png" alt="VLC Web" class="welcome-logo" width="128" height="128">
           <h1>VLC Web</h1>
           <p>Arraste arquivos, pastas, legendas ou URLs para cá — ou escolha uma opção:</p>
           <div class="welcome-actions">
@@ -174,7 +176,7 @@
 
   <div id="ff-toast" class="ff-toast" hidden>
     <div class="ff-row"><svg class="ico"><use href="#i-codec"/></svg><span id="ff-label">FFmpeg</span><span id="ff-pct"></span>
-      <button type="button" class="icon-btn" id="ff-cancel" title="Cancelar" onclick="VW.app && (VW.app.ffmpeg.cancel(), VW.app.showFFProgress(null))"><svg class="ico"><use href="#i-close"/></svg></button></div>
+      <button type="button" class="icon-btn" id="ff-cancel" title="Cancelar" onclick="VW.app && VW.app.player.cancelTasks()"><svg class="ico"><use href="#i-close"/></svg></button></div>
     <div class="f-progress"><div id="ff-bar" class="f-progress-bar"></div></div>
   </div>
   <div id="toasts" class="toasts" aria-live="assertive"></div>
@@ -187,6 +189,7 @@
   <script src="js/core/logger.js"></script>
   <script src="js/core/skins.js"></script>
   <script src="js/media/metadata.js"></script>
+  <script src="js/media/remote.js"></script>
   <script src="js/media/subtitles.js"></script>
   <script src="js/media/audio-engine.js"></script>
   <script src="js/media/video-renderer.js"></script>

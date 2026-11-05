@@ -24,6 +24,7 @@ Abrir o `index.html` direto do disco (`file://`) funciona para o básico, mas o 
 - **Abrir arquivo, múltiplos arquivos e pasta** (inclusive subpastas), arrastar e soltar arquivos, pastas e URLs, colar com `Ctrl+V`.
 - **Abrir disco**: seleciona a pasta de um DVD (`VIDEO_TS`), Blu-ray (`BDMV`) ou CD copiado e encontra os títulos principais.
 - **Abrir transmissão de rede**: HTTP(S), **HLS** (`.m3u8`, via hls.js), **MPEG‑DASH** (`.mpd`, via dash.js), rádios Icecast/Shoutcast e listas remotas.
+- **Links de download** (`…/dld/<id>?token=…&filename=Filme.mkv`): o título vem do parâmetro `filename=` (ou do cabeçalho `Content-Disposition`). Quando o servidor permite CORS, as faixas do arquivo (idiomas, codecs, canais, capítulos) são lidas por pedidos parciais (*Range*), sem baixar o arquivo. Endereços colados com aspas ou espaços são limpos automaticamente.
 - **Dispositivo de captura**: câmera e microfone (com escolha de dispositivo, resolução e taxa de quadros) e **captura da área de trabalho** (tela, janela ou aba).
 - **Mídia recente**, retomada de onde parou (perguntar, sempre ou nunca) e teclas de mídia do sistema.
 - **Decodificador FFmpeg (WebAssembly)**: arquivos que o navegador não reproduz (AVI, WMV, FLV, MPEG‑2/VOB, MKV com HEVC/AC‑3/DTS, WMA, APE…) são remultiplexados sem perdas ou convertidos localmente e reproduzidos.
@@ -42,10 +43,10 @@ Abrir o `index.html` direto do disco (`file://`) funciona para o básico, mas o 
 - **Equalizador de 10 bandas** com as 18 predefinições do VLC, pré-amplificação, modo de 2 passagens e bandas ISO.
 - **Compressor**, **espacializador** (reverberação), **alargador estéreo** e **mudança de tom** (±12 semitons).
 - **Modo estéreo**: estéreo, invertido, esquerdo, direito, mono, Dolby Surround e fones de ouvido.
-- **Faixas de áudio**: HLS, DASH e arquivos MKV/MP4 com várias faixas (a troca é feita pelo FFmpeg). Aceita também um **arquivo de áudio externo sincronizado**.
+- **Faixas de áudio** com idioma, descrição, codec e canais (ex.: *Faixa 2 — Inglês [eng] — E‑AC‑3 5.1*), em HLS, DASH, arquivos locais e links de rede. Navegadores com a API nativa trocam na hora; nos demais, o FFmpeg separa só a faixa escolhida (ou a converte para AAC, se o navegador não a decodificar), que toca em sincronia com o vídeo. Em links de rede isso exige baixar o arquivo, sempre com confirmação: o vídeo continua tocando e o arquivo fica no armazenamento temporário do navegador (OPFS). Aceita também um **arquivo de áudio externo sincronizado**.
 - **Dispositivo de saída** (nos navegadores compatíveis), atraso de áudio e **visualizações**: espectro, espectrômetro, osciloscópio, medidor VU, Goom e espectro 3D.
 - **Diagnóstico de som** (*Áudio → Diagnóstico de som*, `Alt+A`): mostra por que o som não sai (motor bloqueado pelo navegador, mudo, volume 0%, faixa desativada ou codec não suportado), com medidor de sinal, tons de teste e correções com um clique.
-- Áudio em formatos que o navegador não decodifica (AC‑3, E‑AC‑3, DTS, TrueHD, MP2…) é detectado ao abrir o arquivo e convertido pelo FFmpeg.
+- Áudio em formatos que o navegador não decodifica (AC‑3, E‑AC‑3, DTS, TrueHD, MP2…) é detectado ao abrir o arquivo ou o link, e só a faixa de áudio é convertida pelo FFmpeg (o vídeo não é reprocessado).
 - Quando o navegador bloqueia o motor de áudio, aparece o botão **"Clique para ativar o som"**. Se o bloqueio continuar, a reprodução passa automaticamente para a **saída direta**, sem efeitos. Essa saída também pode ser escolhida em *Preferências → Áudio*.
 - Exibição da **capa do álbum** e dos metadados (ID3v1/v2, FLAC, Vorbis/Opus, MP4/M4A, Matroska, WAV).
 
@@ -123,7 +124,8 @@ Algumas funções do VLC para computador dependem de acesso ao sistema que pági
 - Os sites de legendas podem recusar o acesso direto pelo navegador (CORS). Nesse caso, use *Abrir no site* ou configure um proxy CORS de sua confiança.
 
 Também é preciso considerar que:
-- URLs de outros sites precisam permitir CORS para os efeitos de áudio/vídeo, a gravação e a conversão funcionarem;
+- URLs de outros sites precisam permitir CORS para os efeitos de áudio/vídeo, a gravação, a leitura das faixas e a conversão funcionarem. Sem CORS, o vídeo toca em modo de compatibilidade e o menu *Áudio → Faixa de áudio* explica as alternativas;
+- Chrome e Edge só trocam faixas de áudio de um vídeo em *streaming* com a opção `chrome://flags/#enable-experimental-web-platform-features` ativada. Sem ela, trocar a faixa de um link exige baixar o arquivo;
 - o decodificador FFmpeg baixa cerca de 31 MB na primeira vez e processa o arquivo na memória do navegador, então arquivos muito grandes (mais de ~1,5 GB) podem não caber.
 
 ## Estrutura
@@ -138,6 +140,7 @@ js/media/               player, motor de áudio, renderizador WebGL, legendas, m
                         visualizações, lista de reprodução, biblioteca, FFmpeg e gravação
 js/ui/                  janelas, menus, ações/atalhos, controles, lista e diálogos
 js/app.js               inicialização e integração
+assets/                 ícone do site (favicon, PWA, apple-touch) e logotipo
 vendor/                 hls.js (Apache-2.0), dash.js (BSD-3), carregador do ffmpeg.wasm (MIT)
 tools/serve.js          servidor local de desenvolvimento
 ```

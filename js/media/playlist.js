@@ -14,7 +14,7 @@
       this.url = o.url || '';              // URL de rede
       this.stream = o.stream || null;      // MediaStream (captura)
       this.streamLabel = o.streamLabel || '';
-      this.kind = o.kind || (this.stream ? 'stream' : U.kindOf(o.file ? o.file.name : o.url, o.file && o.file.type) || 'video');
+      this.kind = o.kind || (this.stream ? 'stream' : U.kindOf(o.file ? o.file.name : o.url, o.file && o.file.type) || (o.url ? U.kindOf(U.urlFileName(o.url)) : null) || 'video');
       this.duration = isFinite(o.duration) ? o.duration : NaN;
       this.meta = o.meta || {};            // tags (title, artist, album...)
       this.subs = o.subs || [];            // Files de legenda associados
@@ -27,6 +27,7 @@
       this.info = null;                    // resultado de VW.metadata.read
       this.probe = null;                   // resultado do FFmpeg
       this.audioIndex = null;
+      this.autoTitle = !this.title;        // título derivado do nome do arquivo/URL (pode ser refinado)
       if (!this.title) this.title = this.defaultTitle();
     }
     defaultTitle() {
@@ -35,17 +36,17 @@
       if (this.url) {
         try {
           const u = new URL(this.url);
-          const b = U.baseName(u.pathname);
+          const b = U.urlFileName(this.url);
           return (b && U.stripExt(b)) || b || u.host;
         } catch (e) { return this.url; }
       }
       return 'Sem título';
     }
-    get name() { return this.file ? this.file.name : this.url ? U.baseName(this.url) || this.url : this.title; }
+    get name() { return this.file ? this.file.name : this.url ? (this.remoteName || U.urlFileName(this.url) || this.url) : this.title; }
     get uri() { return this.url || (this.file ? (this.path || this.file.name) : this.stream ? 'capture://' + (this.streamLabel || 'device') : ''); }
     get key() {
-      if (this.file) return `f:${this.file.name}:${this.file.size}:${this.file.lastModified}`;
       if (this.url) return 'u:' + this.url;
+      if (this.file) return `f:${this.file.name}:${this.file.size}:${this.file.lastModified}`;
       return 'x:' + this.id;
     }
     get displayTitle() {

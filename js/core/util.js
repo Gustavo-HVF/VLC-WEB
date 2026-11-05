@@ -94,6 +94,42 @@
     return (i ? b.toFixed(b < 10 ? 2 : 1) : b) + ' ' + u[i];
   };
 
+  /* ---------- Idiomas e canais (rótulos de faixas) ---------- */
+  const LANG3 = { por: 'pt', pob: 'pt-BR', eng: 'en', spa: 'es', fre: 'fr', fra: 'fr', ger: 'de', deu: 'de', ita: 'it', jpn: 'ja', kor: 'ko', chi: 'zh', zho: 'zh',
+    rus: 'ru', ara: 'ar', hin: 'hi', dut: 'nl', nld: 'nl', pol: 'pl', tur: 'tr', swe: 'sv', nor: 'no', nob: 'nb', dan: 'da', fin: 'fi', gre: 'el', ell: 'el',
+    heb: 'he', hun: 'hu', cze: 'cs', ces: 'cs', rum: 'ro', ron: 'ro', tha: 'th', vie: 'vi', ind: 'id', ukr: 'uk', cat: 'ca', may: 'ms', msa: 'ms',
+    per: 'fa', fas: 'fa', hrv: 'hr', srp: 'sr', slo: 'sk', slk: 'sk', slv: 'sl', bul: 'bg', lit: 'lt', lav: 'lv', est: 'et', ice: 'is', isl: 'is',
+    tam: 'ta', tel: 'te', ben: 'bn', urd: 'ur', fil: 'fil', tgl: 'tl', glg: 'gl', baq: 'eu', eus: 'eu', lat: 'la' };
+  let langNames = null;
+  /** "por" / "pt-BR" / "eng" → "Português" / "Português (Brasil)" / "Inglês" ('' se indefinido) */
+  U.langName = function (code) {
+    const c = String(code || '').trim().replace('_', '-');
+    const low = c.toLowerCase();
+    if (!c || ['und', 'mul', 'zxx', 'mis', 'unk', 'unknown'].includes(low)) return '';
+    const tag = LANG3[low] || c;
+    try {
+      langNames = langNames || new Intl.DisplayNames(['pt-BR'], { type: 'language' });
+      const n = langNames.of(tag);
+      if (n && n.toLowerCase() !== tag.toLowerCase()) return n.charAt(0).toUpperCase() + n.slice(1);
+    } catch (e) { /* código inválido */ }
+    return c;
+  };
+  /** 2 → "estéreo", 6 → "5.1", "5.1(side)" → "5.1" */
+  U.channelsLabel = function (ch) {
+    if (ch == null || ch === '') return '';
+    if (typeof ch === 'string') {
+      const s = ch.toLowerCase();
+      if (s === 'stereo') return 'estéreo';
+      if (s === 'mono') return 'mono';
+      const m = s.match(/^(\d+\.\d)/); if (m) return m[1];
+      const n = s.match(/^(\d+) channels?/); if (n) return U.channelsLabel(+n[1]);
+      return ch;
+    }
+    return ({ 1: 'mono', 2: 'estéreo', 3: '2.1', 6: '5.1', 7: '6.1', 8: '7.1' })[ch] || (ch + ' canais');
+  };
+  const CODEC_NAMES = { aac: 'AAC', eac3: 'E‑AC‑3', ac3: 'AC‑3', dts: 'DTS', truehd: 'TrueHD', mp3: 'MP3', mp2: 'MP2', opus: 'Opus', vorbis: 'Vorbis', flac: 'FLAC', alac: 'ALAC', pcm_s16le: 'PCM', pcm_s24le: 'PCM' };
+  U.codecName = c => CODEC_NAMES[String(c || '').toLowerCase()] || String(c || '').replace(/^Dolby Digital Plus \((E-AC-3)\)$/, 'E‑AC‑3').replace(/^Dolby Digital \((AC-3)\)$/, 'AC‑3');
+
   U.fmtBitrate = function (bps) {
     if (!isFinite(bps) || bps <= 0) return '—';
     if (bps >= 1e6) return (bps / 1e6).toFixed(2) + ' Mb/s';
@@ -139,6 +175,48 @@
     const b = U.baseName(name);
     const i = b.lastIndexOf('.');
     return i > 0 ? b.slice(0, i) : b;
+  };
+
+  /** Limpa um endereço colado (espaços, aspas, <>, quebras de linha) */
+  U.cleanUrl = function (s) {
+    s = String(s || '').trim().split(/\r?\n/)[0].trim();
+    for (let i = 0; i < 3; i++) {
+      const m = s.match(/^["'“”‘’«<\[(](.*)["'“”‘’»>\])]$/);
+      if (!m) break;
+      s = m[1].trim();
+    }
+    return s.replace(/^["'“”‘’<]+|["'“”‘’>]+$/g, '').replace(/ /g, '%20');
+  };
+
+  /** Nome do arquivo de um "filename" de Content-Disposition */
+  U.dispositionName = function (h) {
+    if (!h) return '';
+    let m = /filename\*\s*=\s*([^']*)'[^']*'([^;]+)/i.exec(h);
+    if (m) { try { return decodeURIComponent(m[2].trim().replace(/^"|"$/g, '')); } catch (e) { /* segue */ } }
+    m = /filename\s*=\s*("([^"]*)"|[^;]+)/i.exec(h);
+    if (!m) return '';
+    const v = (m[2] ?? m[1]).trim();
+    try { return decodeURIComponent(escape(v)); } catch (e) { return v; }
+  };
+
+  /**
+   * Nome do arquivo de uma URL. Links de download costumam trazer o nome real em parâmetros
+   * (?filename=…, ?file=…, response-content-disposition=…) e um identificador no caminho.
+   */
+  U.urlFileName = function (url) {
+    let u;
+    try { u = new URL(url, location.href); } catch (e) { return U.baseName(url); }
+    const q = u.searchParams;
+    const disp = q.get('response-content-disposition') || q.get('rscd');
+    if (disp) { const n = U.dispositionName(disp); if (n) return U.baseName(n); }
+    for (const k of ['filename', 'file_name', 'fileName', 'file', 'name', 'fn', 'title', 'dl', 'download']) {
+      const v = q.get(k);
+      if (v && v.length < 300 && /[^\s]/.test(v) && !/^(1|0|true|false)$/i.test(v)) {
+        const n = U.baseName(v);
+        if (n && (U.ext(n) || k !== 'dl' && k !== 'download')) return n;
+      }
+    }
+    return U.baseName(u.pathname) || u.host;
   };
 
   U.download = function (blob, filename) {
