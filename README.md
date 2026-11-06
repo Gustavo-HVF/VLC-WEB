@@ -23,6 +23,7 @@ Abrir o `index.html` direto do disco (`file://`) funciona para o básico, mas o 
 ### Mídia (abrir, converter, transmitir)
 - **Abrir arquivo, múltiplos arquivos e pasta** (inclusive subpastas), arrastar e soltar arquivos, pastas e URLs, colar com `Ctrl+V`.
 - **Abrir disco**: seleciona a pasta de um DVD (`VIDEO_TS`), Blu-ray (`BDMV`) ou CD copiado e encontra os títulos principais.
+- **Abrir por link**: `index.html?url=…&play=1&title=…&sub=…` (veja [Abrir uma mídia por link](#abrir-uma-mídia-por-link)).
 - **Abrir transmissão de rede**: HTTP(S), **HLS** (`.m3u8`, via hls.js), **MPEG‑DASH** (`.mpd`, via dash.js), rádios Icecast/Shoutcast e listas remotas.
 - **Links de download** (`…/dld/<id>?token=…&filename=Filme.mkv`): o título vem do parâmetro `filename=` (ou do cabeçalho `Content-Disposition`). Quando o servidor permite CORS, as faixas do arquivo (idiomas, codecs, canais, capítulos) são lidas por pedidos parciais (*Range*), sem baixar o arquivo. Endereços colados com aspas ou espaços são limpos automaticamente.
 - **Dispositivo de captura**: câmera e microfone (com escolha de dispositivo, resolução e taxa de quadros) e **captura da área de trabalho** (tela, janela ou aba).
@@ -135,6 +136,36 @@ Também é preciso considerar que:
 - URLs de outros sites precisam permitir CORS para os efeitos de áudio/vídeo, a gravação, a leitura das faixas e a conversão funcionarem. Sem CORS, o vídeo toca em modo de compatibilidade e o menu *Áudio → Faixa de áudio* explica as alternativas;
 - Chrome e Edge só trocam faixas de áudio de um vídeo em *streaming* com a opção `chrome://flags/#enable-experimental-web-platform-features` ativada. Sem ela, trocar a faixa de um link exige baixar o arquivo;
 - o decodificador FFmpeg baixa cerca de 31 MB na primeira vez e processa o arquivo na memória do navegador, então arquivos muito grandes (mais de ~1,5 GB) podem não caber.
+
+## Abrir uma mídia por link
+
+O `index.html` aceita parâmetros, por exemplo para um botão "Abrir no VLC Web" de outro site:
+
+```
+index.html?url=https://exemplo.com/filme.mp4&play=1&title=Meu%20filme&sub=https://exemplo.com/filme.srt
+```
+
+| Parâmetro | O que faz |
+|---|---|
+| `url` (ou `mrl`) | mídia, transmissão (HLS/DASH) ou lista remota; pode repetir para abrir vários itens |
+| `play=1` (ou `autoplay=1`) | começa a tocar (sem ele, o item só entra na lista) |
+| `title` (ou `titulo`) | título do item |
+| `sub` (ou `legenda`) | legenda carregada junto com a mídia |
+
+Endereços relativos ao próprio site (como `/m/...`) também são aceitos.
+
+## Navegador pelo celular (Termux-Toons)
+
+O [Termux-Toons](https://github.com/Gustavo-HVF/Termux-Toons) tem um **navegador pelo celular**: uma página que
+abre os sites pela conexão do celular. Ele baixa o VLC Web deste repositório e o serve no mesmo endereço, em
+`/vlc/`, e o botão **▶ VLC** da barra dele abre no VLC Web os vídeos e músicas da página.
+
+Servido por ele, a página recebe `window.TERMUX_TOONS` e o VLC Web passa a carregar os endereços de rede pela
+conexão do celular (`U.viaPhone` em `js/core/util.js`): mídias abertas por link, listas remotas, rádios, podcasts,
+busca de legendas (quando não há um proxy CORS próprio) e tradução pelo MyMemory. Como o vídeo chega pelo mesmo
+endereço da página, não há bloqueio de CORS: faixas de áudio, legendas embutidas, efeitos e gravação funcionam, e
+o avanço usa pedidos parciais (Range). O menu *Mídia → Voltar ao navegador pelo celular* volta à página inicial
+dele. Fora do Termux-Toons nada disso muda o comportamento.
 
 ## Aplicativo Android
 

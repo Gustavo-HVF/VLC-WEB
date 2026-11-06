@@ -139,7 +139,7 @@
       let lastErr;
       for (const h of hosts) {
         try {
-          const res = await fetch(`${h}/json/stations/search?${params}`, { headers: { Accept: 'application/json' } });
+          const res = await U.phoneFetch(`${h}/json/stations/search?${params}`, { headers: { Accept: 'application/json' } });
           if (!res.ok) throw new Error('HTTP ' + res.status);
           const list = await res.json();
           return list.map(s => ({
@@ -163,7 +163,7 @@
     async removePodcast(id) { await this.store.del('podcasts', id); this.podcasts = await this.store.all('podcasts'); this.emit('change'); }
     async fetchFeed(url) {
       let res;
-      try { res = await fetch(url); } catch (e) { throw new Error('O servidor do feed não permite acesso direto pelo navegador (CORS).'); }
+      try { res = await U.phoneFetch(url); } catch (e) { throw new Error('O servidor do feed não permite acesso direto pelo navegador (CORS).'); }
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const text = await res.text();
       const doc = new DOMParser().parseFromString(text, 'application/xml');

@@ -106,7 +106,7 @@
             for (const part of parts) {
               const url = 'https://api.mymemory.translated.net/get?' + new URLSearchParams(Object.assign({ q: part, langpair: pair }, email ? { de: email } : {}));
               let res;
-              try { res = await fetch(url); } catch (e) { throw new Error('MyMemory inacessível (sem conexão ou bloqueado).'); }
+              try { res = await U.phoneFetch(url); } catch (e) { throw new Error('MyMemory inacessível (sem conexão ou bloqueado).'); }
               const j = await res.json().catch(() => ({}));
               const tr = j.responseData && j.responseData.translatedText;
               if (j.quotaFinished || /MYMEMORY WARNING/i.test(tr || '') || res.status === 429 || j.responseStatus === 429) {
