@@ -279,6 +279,7 @@
           item('Abrir arquivo…', 'open-file', { icon: 'file' }), item('Abrir múltiplos arquivos…', 'open-multi'), item('Abrir pasta…', 'open-folder', { icon: 'folder' }),
           item('Abrir disco…', 'open-disc', { icon: 'disc' }), item('Abrir transmissão de rede…', 'open-network', { icon: 'network' }), item('Abrir dispositivo de captura…', 'open-capture', { icon: 'capture' }),
           item('Abrir local da área de transferência', 'open-clipboard'), { label: 'Abrir mídia recente', submenu: recentMenu },
+          ...(U.phone ? [{ label: 'Voltar ao navegador pelo celular', icon: 'network', hint: 'Termux-Toons', action: () => { location.href = U.phone.inicio || '/'; } }] : []),
           { sep: true },
           item('Salvar lista de reprodução no arquivo…', 'save-playlist', { icon: 'save' }), item('Converter / salvar…', 'convert', { icon: 'convert' }), item('Transmitir…', 'stream', { icon: 'stream' }),
           { label: 'Reproduzir com o decodificador FFmpeg', icon: 'codec', disabled: !(p.item && p.item.file), action: () => p.playWithFFmpeg(p.item) },
@@ -606,19 +607,22 @@
     async openURL(url, opts = {}) {
       url = U.cleanUrl(url);
       if (!url) return [];
-      if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = 'https://' + url;
+      if (/^\.{0,2}\//.test(url)) url = new URL(url, location.href).href;   // caminho do próprio site (ex.: /m/... do Termux-Toons)
+      else if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = 'https://' + url;
       // listas de reprodução remotas
       if (/\.(m3u|pls|xspf|asx)(\?|$)/i.test(url) || (/\.m3u8(\?|$)/i.test(url) && false)) {
         try {
-          const res = await fetch(url);
+          const listUrl = await U.viaPhone(url);
+          const res = await fetch(listUrl);
           const text = await res.text();
           if (!VW.playlistFormats.isHlsManifest(text)) {
-            const entries = VW.playlistFormats.parse(text, url).map(e => ({ url: new URL(e.location, url).href, title: e.title, duration: e.duration, meta: e.meta || {} }));
+            const entries = VW.playlistFormats.parse(text, listUrl).map(e => ({ url: new URL(e.location, listUrl).href, title: e.title, duration: e.duration, meta: e.meta || {} }));
             if (entries.length) return this.player.enqueue(entries, { play: opts.play });
           }
         } catch (e) { this.log.warn('input', 'Não foi possível ler a lista remota: ' + e.message); }
       }
       const entry = { url, startTime: opts.startTime, stopTime: opts.stopTime };
+      if (opts.title) entry.title = opts.title;
       if (opts.subsFile) entry.subs = [opts.subsFile];
       if (opts.extraAudio) entry.extraAudio = opts.extraAudio;
       return this.player.enqueue([entry], { play: opts.play !== false });
@@ -1052,10 +1056,32 @@
     }
 
     /* ======================= Inicialização por URL / sistema ======================= */
+    /**
+     * index.html?url=<mídia>[&url=<outra>][&play=1][&title=<título>][&sub=<legenda>]
+     * (aceita também mrl=, autoplay=, titulo= e legenda=). Usado, por exemplo, pelo botão
+     * "▶ VLC" do navegador pelo celular do Termux-Toons.
+     */
     handleUrlParams() {
       const q = new URLSearchParams(location.search);
-      const url = q.get('url') || q.get('mrl');
-      if (url) this.openURL(url, { play: false });
+      const urls = q.getAll('url').concat(q.getAll('mrl')).map(u => u.trim()).filter(Boolean);
+      if (!urls.length) return;
+      const play = /^(1|true|sim|yes)$/i.test(q.get('play') || q.get('autoplay') || '');
+      const title = (q.get('title') || q.get('titulo') || '').trim();
+      const sub = (q.get('sub') || q.get('legenda') || '').trim();
+      (async () => {
+        let subsFile = null;
+        if (sub) {
+          try {
+            const res = await U.phoneFetch(new URL(sub, location.href).href);
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            subsFile = new File([await res.blob()], U.urlFileName(sub) || 'legenda.srt');
+          } catch (e) { this.log.warn('input', 'Não foi possível baixar a legenda: ' + e.message); }
+        }
+        for (let i = 0; i < urls.length; i++) {
+          await this.openURL(urls[i], { play: play && i === 0, title: urls.length === 1 ? title : '', subsFile: i === 0 ? subsFile : null });
+        }
+      })();
+      if (U.phone) this.log.info('input', 'Rede pelo celular (Termux-Toons): os links de rede são carregados pela conexão do celular.');
     }
     handleLaunchQueue() {
       if ('launchQueue' in window) {

@@ -188,6 +188,38 @@
     return s.replace(/^["'“”‘’<]+|["'“”‘’>]+$/g, '').replace(/ /g, '%20');
   };
 
+  /* ---------- Rede pelo celular (Termux-Toons) ----------
+   * Quando o VLC Web é servido pelo "navegador pelo celular" do Termux-Toons, a página recebe
+   * window.TERMUX_TOONS. Os endereços de rede (vídeos, rádios, podcasts, legendas) passam então a ser
+   * carregados pela conexão do celular, por links /m/<assinatura>/<esquema>/<site>/... do mesmo endereço
+   * da página: sem bloqueio de CORS, com avanço por Range e com todos os efeitos.
+   * A assinatura vale por site, então um pedido ao servidor basta para todos os links daquele site. */
+  U.phone = (typeof window !== 'undefined' && window.TERMUX_TOONS && typeof window.TERMUX_TOONS.assinar === 'string') ? window.TERMUX_TOONS : null;
+  const phonePrefixes = new Map();   // "https://site" → "http://celular:8101/m/<assinatura>/https/site"
+  U.needsPhone = function (url) {
+    if (!U.phone || !url) return false;
+    try {
+      const u = new URL(url, location.href);
+      return /^https?:$/.test(u.protocol) && u.origin !== location.origin;
+    } catch (e) { return false; }
+  };
+  U.viaPhone = async function (url) {
+    if (!U.needsPhone(url)) return url;
+    const u = new URL(url, location.href);
+    const rest = u.pathname + u.search + u.hash;
+    const known = phonePrefixes.get(u.origin);
+    if (known) return known + rest;
+    try {
+      const res = await fetch(U.phone.assinar + encodeURIComponent(u.href), { credentials: 'same-origin', cache: 'no-store' });
+      const j = await res.json();
+      if (!j.url) return url;
+      const m = /^(.*\/m\/[0-9a-f]+\/https?\/[^/]+)/.exec(j.url);
+      if (m) phonePrefixes.set(u.origin, m[1]);
+      return j.url;
+    } catch (e) { return url; }
+  };
+  U.phoneFetch = async function (url, opts) { return fetch(await U.viaPhone(url), opts); };
+
   /** Nome do arquivo de um "filename" de Content-Disposition */
   U.dispositionName = function (h) {
     if (!h) return '';

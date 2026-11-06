@@ -76,7 +76,9 @@
 
     async request(provider, url, opts = {}) {
       let res;
-      try { res = await fetch(this.proxied(url), opts); }
+      // sem proxy CORS próprio, no navegador pelo celular (Termux-Toons) o pedido passa pelo celular
+      const viaPhone = U.phone && !(this.settings.get('subsCorsProxy') || '').trim();
+      try { res = viaPhone ? await U.phoneFetch(url, opts) : await fetch(this.proxied(url), opts); }
       catch (e) {
         throw new Error(`${PROVIDERS[provider].name}: o navegador não conseguiu acessar o serviço (bloqueio de origem/CORS ou sem conexão). Use "Abrir no site" ou configure um proxy CORS na aba "Chaves de API".`);
       }

@@ -154,6 +154,15 @@
     playItem(item, opts) { const i = this.playlist.items.indexOf(item); if (i >= 0) this.playIndex(i, opts); }
 
     async open(item, opts = {}) {
+      // no navegador pelo celular (Termux-Toons), os links de rede passam pela conexão do celular
+      if (item.url && !item.stream && !item.viaPhone && U.needsPhone(item.url)) {
+        const req = this._phoneReq = (this._phoneReq || 0) + 1;
+        const url = await U.viaPhone(item.url);
+        if (req !== this._phoneReq) return;   // outro item foi aberto enquanto isso
+        if (url !== item.url) { item.originalUrl = item.url; item.url = url; }
+        item.viaPhone = true;
+      }
+      this._phoneReq = (this._phoneReq || 0) + 1;
       this.unload();
       const token = ++this.loadToken;
       this.item = item;
